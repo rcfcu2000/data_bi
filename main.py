@@ -1,4 +1,5 @@
 import time
+<<<<<<< HEAD
 import timer.timer as timer
 import every_one_task.commodity_everyday_data as commodity_everyday_data
 import every_one_task.crowd_top10 as crowd_top10
@@ -15,6 +16,20 @@ if __name__ == '__main__':
     type_ = ['cron', 'cron']
     hour = [17, 17]
     minute = [52, 53]
+=======
+
+import base_action
+import timer
+
+if __name__ == '__main__':
+    t = timer.Timer()
+    e = labipaiRPA.labipaiRPA()
+    e1 = labipaiRPA.labipaiRPA()
+    task = [e.test, e1.test1]
+    type_ = ['cron', 'cron']
+    hour = [15, 15]
+    minute = [23, 24]
+>>>>>>> cd5a759c91eaf1f85c123e8bf256658f36943fcb
     shed = t.everyday_time_run(task, type_, hour=hour, minute=minute)
     try:
         print('测试')
