@@ -1,0 +1,6 @@
+sqlalchemy
+pandas
+xlrd
+pymysql
+xlsxwriter
+DrissionPage==4.0.4.12

@@ -1,0 +1,17 @@
+curl 'https://sycm.taobao.com/cc/long/period/nodistinct/item/view/top.json?dateRange=2024-02-02%7C2024-02-02%2C2024-02-01%7C2024-02-01&dateType=compareRange&pageSize=10&page=1&order=desc&orderBy=payAmt&device=0&compareType=cycle&keyword=&follow=false&cateId=&cateLevel=&indexCode=payAmt%2CpayItmCnt%2CsucRefundAmt%2CitemCartCnt%2CitmUv&_=1709273259886&token=518da3bc3' \
+  -H 'authority: sycm.taobao.com' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'bx-v: 2.5.11' \
+  -H 'cookie: thw=cn; t=5c793f54a909e846a39b02eac6800a21; cookie2=1c4eb5ea03adb11cae67b30040e73147; _tb_token_=58bbea5ea1738; xlly_s=1; _samesite_flag_=true; 3PcFlag=1709271092467; sgcookie=E100Fn6Pfcv8SWDro5kdz7gUcUmw4C1vJVafQxLU94nDJ%2FM0bFLq086ayBl3JysSlovctaFd3YlpwKmfoGp2Ow3b5zHW5PzSve1HGazCfFiC4qw7vkdjqRWnX7QweRYhgldR; unb=2217140767009; sn=%E8%9C%A1%E7%AC%94%E6%B4%BE%E5%AE%B6%E5%B1%85%E6%97%97%E8%88%B0%E5%BA%97%3A%E5%8D%8E; uc1=cookie21=U%2BGCWk%2F7oPIg&cookie14=UoYenM%2FLGs4ojQ%3D%3D; csg=9d9ebce6; cancelledSubSites=empty; skt=6fb253b3562a96eb; _cc_=UtASsssmfA%3D%3D; cna=UFCnHPLE7HMCAavfVFoVAJ4u; _euacm_ac_l_uid_=2217140767009; 2217140767009_euacm_ac_c_uid_=2995099000; 2217140767009_euacm_ac_rs_uid_=2995099000; v=0; _portal_version_=new; cc_gray=1; XSRF-TOKEN=eb36153e-c1be-4fd0-83b3-3634eb133b85; _euacm_ac_rs_sid_=334797544; mtop_partitioned_detect=1; _m_h5_tk=491ccda10ce450a1aa0ed7ff2ed1b14d_1709279157542; _m_h5_tk_enc=0eeff3031448399c1a181dd596fc4e3b; JSESSIONID=F81FFAC7D90E82AAD0CD535973534DB5; tfstk=eT8pbesjNADHmNyVj2nMz2glCslgYedF6pRbrTX3Vdp9NBLhxQ6lyLpJe9jSLwYJBL9PdBXoTUpMwLIl-Udzy_OWUXWoTcAeTa7Snxv-oBRUL2JvHq20JmZhPxDmSlV1YvbWxf7kCi3ipqmL_P92P6ibfWQRqjkBrMBX6mz4oYj_n1dQluqwWhQ1hZXTPzTO9g8XoEI_Z-XAZkGt6urPA1rRJFbQxwMb31Bm90qz4Gmf6tctiurPAifOnXnb4uSMt; isg=BAcHMxc6Ln9Vu6vALmHGA4WAlrvRDNvu2c-sJNnmzBe5SD4K5t9CP-vO6ggWoLNm' \
+  -H 'onetrace-card-id: sycm-cc-item-rank.sycm-cc-item-rank$opt-table' \
+  -H 'referer: https://sycm.taobao.com/cc/item_rank' \
+  -H 'sec-ch-ua: "Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'sycm-query;' \
+  -H 'sycm-referer: /cc/item_rank' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
