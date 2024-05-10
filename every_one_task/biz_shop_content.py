@@ -33,7 +33,7 @@ class biz_shop_content:
         self.create_folder_bool = self.base.create_folder("D:", self.base.config_obj['excel_storage_path'])
         
         # 检查并拿到 pageTab [根据需要修改的参数]
-        self.check_url = self.base_config['check_url']
+        self.check_url = self.base.config_obj['check_url']
         
         self.shop_name = self.base_config['shop_name']
         self.table_name = self.__class__.__name__
@@ -202,7 +202,7 @@ class biz_shop_content:
                         f"{self.base.failure_path}/" + filename,
                     )
                 
-            print(f'#{self.base_config['shop_name']}{self.task_name}: 数据写入执行完毕！')
+            print(f"#{self.base_config['shop_name']}{self.task_name}: 数据写入执行完毕！")
               
         except Exception as e:
             
@@ -211,7 +211,7 @@ class biz_shop_content:
                 f"{self.base.failure_path}/" + filename,
             )
             
-            print(f'##{self.base_config['shop_name']}{self.task_name}:  写入报错， {filename} 文件已剪切至 failure 文件夹！')
+            print(f"##{self.base_config['shop_name']}{self.task_name}:  写入报错， {filename} 文件已剪切至 failure 文件夹！")
             self.log(msg=f'# 写入报错， {filename} 文件已剪切至 failure 文件夹！')
             print(e)
 

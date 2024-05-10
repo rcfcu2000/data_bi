@@ -15,7 +15,7 @@ from io import BytesIO
 from datetime import datetime, timedelta
 from DrissionPage import WebPage, ChromiumOptions, ChromiumPage, SessionOptions
 
-class biz_product_dayinfo:
+class biz_shop_level:
     
     def __init__(self, config) -> None:
         
@@ -33,7 +33,7 @@ class biz_product_dayinfo:
         self.create_folder_bool = self.base.create_folder("D:", self.base.config_obj['excel_storage_path'])
         
         # 检查并拿到 pageTab [根据需要修改的参数]
-        self.check_url = self.base_config['check_url']
+        self.check_url = self.base.config_obj['check_url']
         
         self.shop_name = self.base_config['shop_name']
         self.table_name = self.__class__.__name__
@@ -96,13 +96,12 @@ class biz_product_dayinfo:
         
         self.page.change_mode('s')
         
-        if self.base.config_obj['automatic_date'] == '自动计算前一天' or self.base_config['automatic_date'] == '自动计算前一天':
+        if self.base.config_obj.get('automatic_date', self.base_config['automatic_date']) == '自动计算前一天':
             before_day = self.base.get_before_day_datetime()
             date_range = pd.date_range(before_day, before_day)
         else:
             date_range = pd.date_range(self.base.config_obj.get('start_date', self.base_config['start_date']), self.base.config_obj.get('end_date', self.base_config['end_date']))
         
-        # 重试
         url = self.base.config_obj['second_level_url']
         
         for date in date_range:
@@ -115,18 +114,18 @@ class biz_product_dayinfo:
             
             print(f"{self.base_config['shop_name']}{self.task_name}: 开始获取 {date_} 的数据, 链接：{new_url}")
             
-            self.page.get(new_url)
+            self.page.get(new_url['url'])
             
             data_ = json.loads(self.page.raw_data)
             
             if data_['hasError'] is False:
                 
                 obj = {
-                    'level': data_['content']['cateLevel'][-1],
-                    'ranking': data_['content']['rank'][-1],
+                    'level': data_['content']['data']['cateLevel'][-1],
+                    'ranking': data_['content']['data']['rank'][-1],
                     'shop_name': self.base_config['shop_name'],
                     'shop_id': '999',
-                    'statistic_date': date_s
+                    'statistic_date': date_
                 }
             else:
                 self.log(f'获取店铺排名和等级信息失败， 获取日期：{data_}')
@@ -166,9 +165,14 @@ class biz_product_dayinfo:
 
                 # 删除不需要的列
                 excel_data_df = excel_data_df.drop(labels=columns_to_drop, axis=1)
-                
-                # 写入数据库
-                res = self.insert_data_to_db(df=excel_data_df, table_name=self.table_name, add_col=self.add_col, key=self.primary_key)
+
+                res = self.insert_data_to_db(df=excel_data_df, table_name=self.table_name, add_col=self.add_col, key=self.primary_key, 
+                                             db_obj={
+                                                 'db_user': self.base_config['db_user'],
+                                                'db_password': self.base_config['db_password'],
+                                                'db_host': self.base_config['db_host'],
+                                                'db_database': self.base_config['db_database']
+                                            })
                 
                 if res:
                     print(f"#{self.base_config['shop_name']}{self.task_name}: {filename} 的数据执行成功！")
@@ -205,6 +209,7 @@ class biz_product_dayinfo:
             'unit_price',
             'price_strength_exposure'
         ]
+        
         for column in columns_to_convert:
             try:    
                 df[column] = df[column].replace({',': ''}, regex=True).str.rstrip('%').astype('float')
@@ -214,11 +219,11 @@ class biz_product_dayinfo:
 
         return df
     
-    def insert_data_to_db(self, df, table_name, key=[], add_col={}, keywords = None):
+    def insert_data_to_db(self, df, table_name, key=[], add_col={}, keywords = None, db_obj=None):
         
         # print(self.base.insert_data)
         
-        res = self.base.insert_data(df_cleaned=df, table_name=table_name, key=key, add_col=add_col, keywords=keywords)
+        res = self.base.insert_data(df_cleaned=df, table_name=table_name, key=key, add_col=add_col, keywords=keywords, db_obj=db_obj)
         
         if res is False:
             
@@ -269,5 +274,5 @@ class biz_product_dayinfo:
         self.get_json_data()
     
 if __name__ == "__main__":
-    test = biz_product_dayinfo()
+    test = biz_shop_level()
     test.run()

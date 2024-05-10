@@ -1951,13 +1951,15 @@ class base_action:
         return df
 
     # 创建数据库引擎
-    def create_engine(self):
+    def create_engine(self, db_obj=None):
 
         try:
-            self.log_arr.append(
-                f"info/shs/【{self.get_date_time()}】: 开始创建数据库引擎 ..."
-            )
-
+            if db_obj is not None:
+                self.config_obj['db_user'] = db_obj['db_user']
+                self.config_obj['db_password'] = db_obj['db_password']
+                self.config_obj['db_host'] = db_obj['db_host']
+                self.config_obj['db_database'] = db_obj['db_database']
+                
             database_url = f"mysql+pymysql://{self.config_obj['db_user']}:{self.config_obj['db_password']}@{self.config_obj['db_host']}/{self.config_obj['db_database']}"
             engine = create_engine(database_url)
             self.create_engine_bool = True
@@ -2284,11 +2286,11 @@ class base_action:
 
      # 写入数据库的方法 [ 直接执行到数据库的方法 ]
     
-    def insert_data(self, df_cleaned, table_name, key=[], add_col={}, keywords=None):
+    def insert_data(self, df_cleaned, table_name, key=[], add_col={}, keywords=None, db_obj=None):
         
         mark = False
         
-        engine = self.create_engine()
+        engine = self.create_engine(db_obj=db_obj)
         
         if engine:
             
