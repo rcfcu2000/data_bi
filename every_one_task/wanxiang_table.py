@@ -1,9 +1,9 @@
-import base_action
+from .base_action import base_action
 
 class wanxiang_table:
     
     def __init__(self) -> None:
-        self.base = base_action.base_action()
+        self.base = base_action()
         pass
     
     

@@ -10,6 +10,7 @@ import re
 import time
 import shutil
 import yagmail
+import logging
 import concurrent.futures
 from sqlalchemy import create_engine, text, Table, Column, String, Date, Float, MetaData, DECIMAL
 from sqlalchemy.dialects.mysql import DOUBLE
@@ -71,6 +72,9 @@ class base_action:
         # 人群 top 10
         self.clean_and_transform_crowd_top_10_data_bool = False
         
+        # 人群 top 20
+        self.clean_and_transform_crowd_top_20_data_bool = False
+        
         # 人群
         self.clean_and_transform_crowd_data_bool = False
         
@@ -90,13 +94,14 @@ class base_action:
         # 发送邮件内容的字符串拼接
         self.email_msg = ""
         self.email_msg_arr = []
-
-        # 这个参数主要用于控制 顺序执行的方法是否需要 改变模式, 改变模式的目的是为了下载excel数据的返回格式正确. 为 1 需要改变, 不为1 就不需要
         self.change_mode_index = 1
         
         # calc 执行sql 的时间
         self.calc_start_date = ''
         self.calc_end_date = ''
+        
+        # config_name
+        self.config_name = ''
 
     # 获取可用端口
     def __find_free_port(self):
@@ -123,8 +128,12 @@ class base_action:
             res["result"] = str(e)
 
             return res
-
-        pass
+        
+    # 获取要执行的配置文件name
+    def get_config_name(self):
+        with open('./config/main.txt', 'r', encoding='utf-8') as f:
+            config_name = f.read().split('\n')
+            return config_name
 
     # 读取配置文件
     def get_config(self, key, config_name='my_config.ini', mode='s'):
@@ -180,62 +189,77 @@ class base_action:
         
         mark = False
         
-        config = configparser.ConfigParser()
+        try:
+            # config_name = self.config_name
+            
+            config = configparser.ConfigParser()
         
-        config.read(f'./config/{config_name}', encoding='utf-8')
+            config.read(f'./config/{config_name}', encoding='utf-8')
         
-        documents = config[key]
+            documents = config[key]
         
-        for key in documents:
-            self.config_obj[key] = documents[key]
+            for key in documents:
+                self.config_obj[key] = documents[key]
         
-        mark = True
+            mark = True
+            
+        except Exception as e:
+            
+            # self.log_([f"error/shs/【{self.get_date_time()}】: 获取配置文件失败, 下面为错误信息."])
+            # self.log_([f"error/shs/【{self.get_date_time()}】: {str(e)}"])
+            
+            print('# 获取配置文件失败, 下面为错误信息.')
+            print(f'# {str(e)}')
+        
         return mark
+    
+    def get_configs_return_obj(self, key, config_name='my_config.ini'):
+        
+        obj = {}
+        
+        try:
+            
+            config = configparser.ConfigParser()
+        
+            config.read(f'./config/{config_name}', encoding='utf-8')
+        
+            documents = config[key]
+        
+            for key in documents:
+                obj[key] = documents[key]
+        
+            return obj
+            
+        except Exception as e:
+            
+            print("获取配置文件失败, 下面为错误信息.")
+            print(f"{str(e)}")
+        
+            return False
         
 
     # get port
     def get_port(self):
         return self.__find_free_port()
-        pass
 
     def sycm_login(self, task_name="【商品每日数据】"):
         
         mark = False
-        
-        self.log_arr.append(
-            f"info/shs/【{self.get_date_time()}】: 开始自动化每日商品数据 ..."
-        )
 
-        if self.visit_bool is False:
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 浏览器访问失败!"
-            )
-            return mark
+        # if self.visit_bool is False:
+        #     return mark
 
-        self.log_arr.append(f"success/shs/【{self.get_date_time()}】: 访问成功 !")
         try:
             if self.page.url == self.config_obj["url"]:
-                self.log_arr.append(
-                    f"info/shs/【{self.get_date_time()}】: 现在开始登录 ...!"
-                )
                 self.page("#fm-login-id").input(self.config_obj["user_name"])
                 self.page("#fm-login-password").input(self.config_obj["pass_word"])
                 # 这里可以做一个判断，用于新老登录界面的异常捕获
                 iframe = self.page("#alibaba-login-box")
                 res = iframe(".fm-button fm-submit password-login").click()
                 # print(f'res{res}')
-
-                self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: 登录成功... 强制等待 5 秒钟 !"
-                )
-
                 self.page.wait(5)
                 
             else:
-
-                self.log_arr.append(
-                    f"info/shs/【{self.get_date_time()}】: 已经登录，无需再次登录... 强制等待 5 秒钟 !"
-                )
 
                 self.page.wait(5)
             
@@ -243,14 +267,24 @@ class base_action:
             return True
         
         except Exception as e:
-
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 登录失败, error: {str(e)}"
-            )
-
-            self.log_(self.log_arr, task_name=task_name)
             
-            return False
+            print(f'点击登录失败，可能是老版本的登录界面，准备切换为老版本的登录')
+            
+            try:
+                
+                iframe = self.page("@src=//login.taobao.com/member/login.jhtml?from=sycm&full_redirect=true&style=minisimple&minititle=&minipara=0,0,0&sub=true&redirect_url=http://sycm.taobao.com/")
+                iframe(".fm-button fm-submit password-login").click()
+                self.page.wait(5)
+                self.login_bool = True
+                return True
+            
+            except Exception as e:
+                
+                print(f'登录失败, <error> {str(e)}')
+                self.log_([f"error/shs/【{self.get_date_time()}】: 登录失败, 下面为错误信息."])
+                self.log_([f"error/shs/【{self.get_date_time()}】: <error> {str(e)}"])
+            
+                return False
 
     def down_load_excel(
         self, task_name="【商品每日数据】", mode='s', automatic_date=True
@@ -264,9 +298,6 @@ class base_action:
         # 改变模式 切换为 S 模式：requests
         try:
             self.page.change_mode(mode)
-            self.log_arr.append(
-                f"info/shs/【{self.get_date_time()}】: 切换为 requests（session_page） 模式"
-            )
 
             # 将开始日期和结束日期替换成 start_date
             url = self.config_obj["excel_url"]
@@ -280,11 +311,6 @@ class base_action:
 
             modified_url = re.sub(
                 re_str, f"dateRange={next_day_str}%7C{next_day_str}", url
-            )
-
-            # 计算日期
-            self.log_arr.append(
-                f"info/shs/【{self.get_date_time()}】: 开始计算日期 ..."
             )
             date_format = "%Y-%m-%d"
             date1 = datetime.strptime(date1_str, date_format)
@@ -308,19 +334,7 @@ class base_action:
             else:
 
                 days_difference += 1
-
-            self.log_arr.append(
-                f"info/shs/【{self.get_date_time()}】: 当前下载日期： {date1_str}..."
-            )
-
-            self.log_arr.append(
-                f"info/shs/【{self.get_date_time()}】: 循环下载次数为 {days_difference}..."
-            )
-
-            # print(modified_url)
-            # print(days_difference)
-            self.email_msg += f"下载excel起始日期：{date1_str}\n"
-            self.email_msg += f"下载excel结束日期：{date2_str}\n"
+            
             count = 0
             error_count = 0
             index = 4
@@ -360,20 +374,11 @@ class base_action:
                 try:
                     date_ = next_day_str
 
-                    self.log_arr.append(
-                        f"info/shs/【{self.get_date_time()}】: 第{i+1}次, 开始访问 {modified_url}"
-                    )
-
                     # print(modified_url)
                     self.page.get(modified_url)
 
                     # self.page.raw_data 相当于 requests的response.content
                     if self.page.raw_data:
-                        # print(self.page.raw_data)
-                        self.log_arr.append(
-                            f"success/shs/【{self.get_date_time()}】: 第{i + 1}次, 内容已下载, 开始保存为 excel..."
-                        )
-                        # print(self.page.raw_data)
                         # 这里开始要做一些变化
                         dtype_mapping = {"商品ID": str}
                         df = pd.read_excel(
@@ -382,27 +387,14 @@ class base_action:
                             header=index,
                         )
                         excel_path = f"{self.source_path}/【生意参谋平台】{task_name}&&{next_day_str}&&{next_day_str}.xlsx"
+                        
                         df.to_excel(excel_path, index=False,
                                     engine="xlsxwriter")
-
-                        self.log_arr.append(
-                            f"success/shs/【{self.get_date_time()}】: 第{i + 1}次, excel保存成功, 保存路径为：{excel_path}"
-                        )
-                    
                     else:
-                        error_count += 1
-                        self.log_arr.append(
-                            f"error/shs/【{self.get_date_time()}】: 第{i + 1}次, excel下载失败, 下载失败的日期为: {next_day_str}"
-                        )
-                        # self.email_msg += f"excel下载失败, 下载失败的日期: {next_day_str}\n"
-                        
+                        error_count += 1     
 
                     # 开始计算下一个日期
                     if days_difference > 1:
-
-                        self.log_arr.append(
-                            f"info/shs/【{self.get_date_time()}】: 开始计算下一个日期"
-                        )
 
                         re_str = r"dateRange=(\d{4}-\d{2}-\d{2})%7C(\d{4}-\d{2}-\d{2})"
                         date_match = re.search(re_str, modified_url)
@@ -416,70 +408,43 @@ class base_action:
                             modified_url,
                         )
 
-                        self.log_arr.append(
-                            f"info/shs/【{self.get_date_time()}】: 下一个日期为： {next_day_str}"
-                        )
-
-                        pass
-
                     # 休眠一定时间
-                    self.log_arr.append(
-                        f"info/shs/【{self.get_date_time()}】: 强制休眠随机6秒内"
-                    )
                     time.sleep(random.randint(0, 6))
                     count += 1
 
                 except Exception as e:
                     
                     error_count += 1
-                    self.log_arr.append(
-                        f"error/shs/【{self.get_date_time()}】: 下载excel失败, 错误信息：{str(e)}, 当前出错日期：{date_}"
-                    )
-                    # self.email_msg += f"excel下载失败, 下载失败的日期: {next_day_str}\n"
-                    
-                    print(f"# error: 下载excel出错，{e}")
+
+                    self.log_([f"error/shs/【{self.get_date_time()}】: 下载excel失败, 当前出错日期：{date_}"])
+                    self.log_([f"error/shs/【{self.get_date_time()}】: errorMessage: {str(e)}"])
 
                     res = self.fail_to_txt(next_day_str, task_name=task_name)
-                    
-                    print(f"{res['message']}")
+
                     continue
 
             self.everyday_data_loadExcel_bool = True
-            self.log_arr.append(
-                f"success/shs/【{self.get_date_time()}】: 数据已下载完成 下载文件个数：{count} , 下载个数与循环次数是否相等：{days_difference == count} ..."
-            )
-            self.email_msg += f"需要下载的excel个数：{count}\n"
-            self.email_msg += f"下载失败的excel个数：{error_count}\n"
-            self.email_msg += f"下载成功的excel个数：{count-error_count}\n"
             
             self.down_load_excel_bool = True
 
         except Exception as e:
-
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 下载excel出错, error：{str(e)} ..."
-            )
-            self.email_msg = f"下载excel出错, 错误信息：{str(e)}\n"
             
-            self.log_(self.log_arr)
+            self.log_([f"error/shs/【{self.get_date_time()}】: 下载excel出错, 当前出错日期：{date_}, 下载环节异常终止!"])
+            self.log_([f"error/shs/【{self.get_date_time()}】: errorMessage: {str(e)}"])
         
         return self.down_load_excel_bool
         
-
-    # 商品流量数据
-    def commodity_flow_data(self, key_word='3.24', task_tag='[每一次访问来源]', mode="s", automatic_date=True):
+    # 商品流量数据 [根据excel 元数据下载数据]
+    def commodity_flow_data(self, task_tag='[每一次访问来源]', mode="s", automatic_date=True):
 
         # self.get_config('sycmCommodityTrafficSource')
         # 读取excel全部商品数据
         folder_path = f"./commodity_source_data"
         file_list = [file for file in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, file))]
-        print(file_list)
-
+        # print(file_list)
         excel_data = pd.read_excel(
             f"{folder_path}/{file_list[0]}", usecols="B, H")
         excel_data_df = excel_data.sort_values(by=["商品ID"], ascending=False)
-
-        print(f"# 商品数据表总数: {len(excel_data_df)}")
 
         start_date = self.config_obj["start_date"]
         end_date = self.config_obj["end_date"]
@@ -529,11 +494,148 @@ class base_action:
 
         pass
 
+    def commodity_flow_data_from_biz_product_performance(self, task_tag='[每一次访问来源]', mode='s', automatic_date=True):
+        
+        # 处理时间
+        
+        start_date = self.config_obj["start_date"]
+        end_date = self.config_obj["end_date"]
+        date_range = []
+        datetime_ = ""
+
+        if automatic_date:
+            datetime_ = self.get_before_day_datetime()
+            start_date = datetime_
+            end_date = datetime_
+        
+        self.calc_start_date = start_date
+        self.calc_end_date = end_date
+
+        date_range = pd.date_range(start_date, end_date)
+
+        self.page.change_mode(mode)
+        
+        # 初始化 futures 列表
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            
+            futures = []
+            
+            for date in date_range:     
+                # 拿到需要下载的 item id
+                res = self.get_item_id(date_=date)
+                
+                if res['mark'] is False:
+                    # print('获取item id 失败。')
+                    return {
+                    'mark': False,
+                    'message': '获取item id 失败。' ,
+                    'data': ''
+                    }
+                    
+                item_id = res['result']
+                
+                # print(f'当前在线商品总个数: {len(item_id)} 个')
+                
+                for id in item_id:
+                    
+                    future = executor.submit(self.download_item_keywords_, id, date, task_tag)
+                    futures.append(future)
+                
+                num = random.randint(15, 30)
+                # print(f"# 强制等待 {num} 秒钟... ")
+                time.sleep(num)
+                
+            # 等待所有提交的任务完成
+            concurrent.futures.wait(futures)
+            
+    def download_item_keywords_(self, id, date_, task_tag):
+        
+        dstring = date_.strftime("%Y-%m-%d")
+        url = self.config_obj["excel_url"]
+        
+        match = re.search(
+            r"dateRange=(\d{4}-\d{2}-\d{2}\|\d{4}-\d{2}-\d{2})", url)
+        original_date_range = match.group(1)
+
+        new_date_range = f"{dstring}|{dstring}"
+        modified_url = re.sub(
+            r"dateRange=\d{4}-\d{2}-\d{2}\|\d{4}-\d{2}-\d{2}",
+            f"dateRange={new_date_range}",
+            url,
+        )
+
+        item_ids = re.findall(r"itemId=(\d+)", modified_url)
+        new_item_ids = [id, id]
+        modified_url = re.sub(
+            r"itemId=\d+", lambda x: f"itemId={new_item_ids.pop(0)}", modified_url
+        )
+
+        # 修改参数  下载不同维度的数据来源
+        parsed_url = urlparse(modified_url)
+        query_params = parse_qs(parsed_url.query)
+
+        # 获取belong参数的值，如果存在则进行修改
+        belong_param = query_params.get('belong', None)
+        if belong_param:
+            if task_tag == '[第一次访问来源]':
+                new_belong_value = "farthest"
+                query_params['belong'] = [new_belong_value]
+                new_query_string = urlencode(query_params, doseq=True)
+                new_url_parts = parsed_url._replace(query=new_query_string)
+                new_url = urlunparse(new_url_parts)
+                modified_url = new_url
+
+            elif task_tag == '[最后一次访问来源]':
+                new_belong_value = "nearest"
+                query_params['belong'] = [new_belong_value]
+                new_query_string = urlencode(query_params, doseq=True)
+                new_url_parts = parsed_url._replace(query=new_query_string)
+                new_url = urlunparse(new_url_parts)
+                modified_url = new_url
+            else:
+                pass
+            
+        else:
+            print("<error> 商品流量数据 url 已变更, 请查看相关请求连接.")
+            self.log_([f"error/shs/【{self.get_date_time()}】: 商品流量数据 url 已变更, 请查看相关请求连接"])
+            return
+
+        # print(modified_url)
+        
+        self.page.get(modified_url)
+
+        if self.page.raw_data:
+            try:
+                # print(self.page.raw_data)
+                df = pd.read_excel(BytesIO(self.page.raw_data), header=5)
+                excel_path = f"{self.source_path}/【生意参谋平台】【商品流量数据来源】【{id}】{task_tag}&&{dstring}&&{dstring}.xlsx"
+                # print(self.source_path)
+                df.insert(df.shape[1], "日期", dstring)
+                df.to_excel(excel_path, index=False, engine="xlsxwriter")
+                
+                # print(
+                #     f"成功: 【生意参谋平台】【商品流量数据来源】【{id}】{task_tag}&&{dstring}&&{dstring}.xlsx  保存成功!"
+                # )
+                
+            except Exception as e:
+                
+                # print(
+                #     f"失败: 【生意参谋平台】【商品流量数据来源】【{id}】{task_tag}&&{dstring}&&{dstring}.xlsx  下载失败!"
+                # )
+                self.log_([f"error/shs/【{self.get_date_time()}】:【生意参谋平台】【商品流量数据来源】【{id_}】{task_tag}&&{dstring}&&{dstring}.xlsx  下载失败!"])
+                # 创建 txt 记录下载失败的excel , 自动重下
+                res = self.fail_to_txt(
+                    dstring, task_name=f"【商品流量数据来源】{task_tag}", id_=id)
+                
+                # print(f"{res['message']}")
+           
     def download_item_keywords(self, args):
         id_ = args[0]
         dates_ = args[1]
         task_tag = args[2]
-        print(f"{id_}: {dates_}")
+        
+        # print(f"{id_}: {dates_}")
 
         dstring = dates_.strftime("%Y-%m-%d")
         # print(f'字符串类型的date: {dstring}')
@@ -563,7 +665,7 @@ class base_action:
         # 获取belong参数的值，如果存在则进行修改
         belong_param = query_params.get('belong', None)
         if belong_param:
-            if task_tag == '第一次访问来源':
+            if task_tag == '[第一次访问来源]':
                 new_belong_value = "farthest"
                 query_params['belong'] = [new_belong_value]
                 new_query_string = urlencode(query_params, doseq=True)
@@ -571,7 +673,7 @@ class base_action:
                 new_url = urlunparse(new_url_parts)
                 modified_url = new_url
 
-            elif task_tag == '最后一次访问来源':
+            elif task_tag == '[最后一次访问来源]':
                 new_belong_value = "nearest"
                 query_params['belong'] = [new_belong_value]
                 new_query_string = urlencode(query_params, doseq=True)
@@ -579,14 +681,11 @@ class base_action:
                 new_url = urlunparse(new_url_parts)
                 modified_url = new_url
             else:
-
                 pass
+            
         else:
             print("# 商品流量数据 url 已变更, 请查看相关请求连接.")
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 商品流量数据 url 已变更, 请查看相关请求连接."
-            )
-            self.log_(self.log_arr, task_name='【商品流量数据来源】')
+            self.log_([f"error/shs/【{self.get_date_time()}】: 商品流量数据 url 已变更, 请查看相关请求连接"])
             return
 
         print(modified_url)
@@ -608,22 +707,37 @@ class base_action:
                 print(
                     f"excel : 【生意参谋平台】【商品流量数据来源】【{id_}】{task_tag}&&{dstring}&&{dstring}.xlsx  下载失败!"
                 )
-                # excel_path = f"{self.failure_path}/error【生意参谋平台】【商品数据来源】【{id_}】&&{dstring}&&{dstring}.xlsx"
+                self.log_([f"error/shs/【{self.get_date_time()}】:【生意参谋平台】【商品流量数据来源】【{id_}】{task_tag}&&{dstring}&&{dstring}.xlsx  下载失败!"])
                 # 创建 txt 记录下载失败的excel , 自动重下
                 res = self.fail_to_txt(
                     dstring, task_name=f"【商品流量数据来源】{task_tag}", id_=id_)
                 print(f"{res['message']}")
-        pass
+        # pass
 
     # pandas insert excel
     def pandas_insert_data(self, data, path):
 
-        # 将数据转换成DataFrame对象
-        df = pd.DataFrame(data)
+        try:
+            # 将数据转换成DataFrame对象
+            df = pd.DataFrame(data)
 
-        # 将DataFrame写入Excel文件
-        excel_file = path  # 设置输出的Excel文件名
-        df.to_excel(excel_file, index=False)
+            # 将DataFrame写入Excel文件
+            excel_file = path  # 设置输出的Excel文件名
+            df.to_excel(excel_file, index=False)
+            
+            return {
+                'mark': True,
+                'data': df,
+                'msg': 'excel 写入成功！'   
+            }
+        except Exception as e:
+            
+            return {
+                'mark': False,
+                'data': [],
+                'error': e,
+                'msg': 'excel 写入失败！'  
+            }
 
     # 计算个体单元执行次数
     def compute_count(self, date1_str, date2_str):
@@ -678,75 +792,81 @@ class base_action:
 
     # 清洗商品每日数据
     def clean_and_transform_product_flowes_data(self, df):
+        
+        try:
+            # 数据映射和转换
+            column_mappings = {
+                "一级来源": "source_type_1",
+                "二级来源": "source_type_2",
+                "三级来源": "source_type_3",
+                "访客数": "visitors_count",
+                "浏览量": "views_count",
+                "支付金额": "paid_amount",
+                "浏览量占比": "view_rate",
+                "店内跳转人数": "in_store_transfers",
+                "跳出本店人数": "outbound_exits",
+                "收藏人数": "favorited_users",
+                "加购人数": "add_to_carts",
+                "下单买家数": "buyers_placed_orders",
+                "下单转化率": "order_conversion_rate",
+                "支付件数": "paid_quantity",
+                "支付买家数": "total_paid_buyers",
+                "支付转化率": "pay_conversion_rate",
+                "直接支付买家数": "direct_paid_buyers",
+                "收藏商品-支付买家数": "favorited_and_paid_buyers",
+                "粉丝支付买家数": "fans_paid_buyers",
+                "加购商品-支付买家数": "add_to_cart_and_paid_buyers",
+                "日期": "statistic_date",
+            }
+            df = df.rename(columns=column_mappings)
 
-        # 数据映射和转换
-        column_mappings = {
-            "一级来源": "source_type_1",
-            "二级来源": "source_type_2",
-            "三级来源": "source_type_3",
-            "访客数": "visitors_count",
-            "浏览量": "views_count",
-            "支付金额": "paid_amount",
-            "浏览量占比": "view_rate",
-            "店内跳转人数": "in_store_transfers",
-            "跳出本店人数": "outbound_exits",
-            "收藏人数": "favorited_users",
-            "加购人数": "add_to_carts",
-            "下单买家数": "buyers_placed_orders",
-            "下单转化率": "order_conversion_rate",
-            "支付件数": "paid_quantity",
-            "支付买家数": "total_paid_buyers",
-            "支付转化率": "pay_conversion_rate",
-            "直接支付买家数": "direct_paid_buyers",
-            "收藏商品-支付买家数": "favorited_and_paid_buyers",
-            "粉丝支付买家数": "fans_paid_buyers",
-            "加购商品-支付买家数": "add_to_cart_and_paid_buyers",
-            "日期": "statistic_date",
-        }
-        df = df.rename(columns=column_mappings)
+            # 将包含逗号的字符串字段转换为整数
+            columns_to_convert = [
+                "paid_quantity",
+                "visitors_count",
+                "in_store_transfers",
+                "outbound_exits",
+                "favorited_users",
+                "add_to_carts",
+                "buyers_placed_orders",
+                "direct_paid_buyers",
+                "favorited_and_paid_buyers",
+                "fans_paid_buyers",
+                "add_to_cart_and_paid_buyers",
+                "views_count",
+            ]
 
-        # 将包含逗号的字符串字段转换为整数
-        columns_to_convert = [
-            "paid_quantity",
-            "visitors_count",
-            "in_store_transfers",
-            "outbound_exits",
-            "favorited_users",
-            "add_to_carts",
-            "buyers_placed_orders",
-            "direct_paid_buyers",
-            "favorited_and_paid_buyers",
-            "fans_paid_buyers",
-            "add_to_cart_and_paid_buyers",
-            "views_count",
-        ]
-
-        for column in columns_to_convert:
-            df[column] = (
-                df[column]
-                .replace({",": ""}, regex=True)
-                .astype("int64", errors="ignore")
-            )
-
-        # 将包含逗号和%的字符串字段转换为浮点数
-        columns_to_convert = [
-            "view_rate",
-            "pay_conversion_rate",
-            "order_conversion_rate",
-            "paid_amount",
-        ]
-
-        for column in columns_to_convert:
-            try:
+            for column in columns_to_convert:
                 df[column] = (
                     df[column]
                     .replace({",": ""}, regex=True)
-                    .str.rstrip("%")
-                    .astype("float")
+                    .astype("int64", errors="ignore")
                 )
-            except Exception as e:
-                # print(column, e)
-                df[column] = 0.0
+
+            # 将包含逗号和%的字符串字段转换为浮点数
+            columns_to_convert = [
+                "view_rate",
+                "pay_conversion_rate",
+                "order_conversion_rate",
+                "paid_amount",
+            ]
+
+            for column in columns_to_convert:
+                try:
+                    df[column] = (
+                        df[column]
+                        .replace({",": ""}, regex=True)
+                        .str.rstrip("%")
+                        .astype("float")
+                    )
+                except Exception as e:
+                    # print(column, e)
+                    df[column] = 0.0
+        
+        except Exception as e:
+            
+            print(f"数据清洗失败!")
+            self.log_([f"error/shs/【{self.get_date_time()}】: 商品流量来源 清洗失败", f'{str(e)}'])
 
         return df
 
@@ -868,18 +988,13 @@ class base_action:
                     # print(column, e)
                     df[column] = 0.0
 
-            self.log_arr.append(
-                f"success/shs/【{self.get_date_time()}】: 清洗数据成功 ..."
-            )
-
             self.clean_and_transform_product_data_bool = True
 
         except Exception as e:
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 清洗数据失败, error: {str(e)} ..."
-            )
+            
+            print(f"数据清洗失败!")
+            self.log_([f"error/shs/【{self.get_date_time()}】: 商品每日数据 清洗失败", f'{str(e)}'])
             self.email_msg = f"清洗数据失败, error: {str(e)}\n"
-            self.log_(self.log_arr)
 
         return df
 
@@ -1040,6 +1155,7 @@ class base_action:
             for column in columns_to_convert:
                 try:
                     if tag != '每一次访问来源':
+                        
                         if column == 'ad_clicks_change' or column == 'ad_transaction_amount_change':
                             continue
 
@@ -1049,20 +1165,17 @@ class base_action:
                     df[column] = (df[column].replace({",": ""}, regex=True).str.strip().str.replace(r'%', '', regex=True).astype(float))
 
                 except Exception as e:
-                    print(f'3, {column}, {e}')
+                    print(f'<error> {column}, {e}')
                     df[column] = 0.0
 
             self.clean_and_transform_shop_data_bool = True
 
         except Exception as e:
-            print('报错了')
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 清洗数据失败, error: {str(e)} ..."
-            )
+            
+            print(f"数据清洗失败!")
+            self.log_([f"error/shs/【{self.get_date_time()}】: 店铺流量来源 清洗失败", f'{str(e)}'])
+            
             self.email_msg = f"清洗数据失败, error: {str(e)}\n"
-            self.log_(self.log_arr)
-            print(self.email_msg)
-            pass
 
         return df
 
@@ -1245,14 +1358,11 @@ class base_action:
                     .astype("float", errors="ignore")
                 )
 
-            #
-            pass
         except Exception as e:
-            print("# error", cn, df[cn], e)
-            pass
+            print("# 数据清洗失败:", cn, df[cn], e)
+            self.log_([f"error/shs/【{self.get_date_time()}】: 宝贝主体报表 清洗失败", f'{str(e)}'])
 
         return df
-        pass
 
     # 关键词报表
     def clean_and_transform_wanxiang_keywords_data(self, df):
@@ -1430,13 +1540,11 @@ class base_action:
                 )
 
             #
-            pass
         except Exception as e:
-            print("# error", cn, df[cn], e)
-            pass
-
+            print("# 数据清洗失败:", cn, df[cn], e)
+            self.log_([f"error/shs/【{self.get_date_time()}】: 关键词报表 清洗失败", f'{str(e)}'])
+        
         return df
-        pass
 
     # 人群报表
     def clean_and_transform_wanxiang_audience_data(self, df):
@@ -1617,11 +1725,10 @@ class base_action:
             #
             pass
         except Exception as e:
-            print("# error", cn, df[cn], e)
-            pass
+            print("# 数据清洗失败:", cn, df[cn], e)
+            self.log_([f"error/shs/【{self.get_date_time()}】: 人群报表 清洗失败", f'{str(e)}'])
 
         return df
-        pass
 
     # 搜索排行
     def clean_and_transform_search_rank_data(self, df):
@@ -1677,12 +1784,8 @@ class base_action:
             self.clean_and_transform_search_rank_data_bool = True
 
         except Exception as e:
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 清洗数据失败, error: {str(e)} ..."
-            )
-            self.email_msg = f"清洗数据失败, error: {str(e)}\n"
-            self.log_(self.log_arr)
-            print(f'# clean_and_transform_search_rank_data, error: {str(e)}')
+            print("# 数据清洗失败:", cn, df[cn], e)
+            self.log_([f"error/shs/【{self.get_date_time()}】: 搜索排行 清洗失败", f'{str(e)}'])
 
         return df
 
@@ -1736,17 +1839,60 @@ class base_action:
             self.clean_and_transform_crowd_top_10_data_bool = True
 
         except Exception as e:
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 清洗数据失败, error: {str(e)} ..."
-            )
-            self.email_msg = f"清洗数据失败, error: {str(e)}\n"
-            self.log_(self.log_arr)
-            print(f'# clean_and_transform_crowd_top_10_data, error: {str(e)}')
+            print("# 数据清洗失败:", cn, df[cn], e)
+            self.log_([f"error/shs/【{self.get_date_time()}】: 人群top10 清洗失败", f'{str(e)}'])
             return False
 
         return df
 
-        # 人群top10
+    # 人群top20
+    def clean_and_transform_crowd_top_20_data(self, df):
+        # 处理 Excel 文件的前几行无用数据
+        try:
+
+            # df.columns = df.columns.str.replace("\n", "")
+
+            # 将包含逗号的字符串字段转换为整数
+            columns_to_convert = [
+                "visitors",
+                "paid_buyers",
+                "tgi"
+            ]
+
+            for column in columns_to_convert:
+                df[column] = (
+                    df[column]
+                    .replace({"-": 0}, regex=True)
+                    .astype("int64", errors="ignore")
+                )
+                # print(df[column])
+
+            # df.to_excel('./output.xlsx', index=False, engine="xlsxwriter")
+
+            columns_to_convert = [
+                "paid_amount",
+                "conversion_rate"
+            ]
+
+            for column in columns_to_convert:
+                try:
+                    df[column] = (
+                        df[column]
+                        .replace({"-": 0.0}, regex=True)
+                        .astype("float")
+                    )
+                except Exception as e:
+                    # print(column, e)
+                    df[column] = 0.0
+
+            self.clean_and_transform_crowd_top_20_data_bool = True
+
+        except Exception as e:
+            print("# 数据清洗失败:", cn, df[cn], e)
+            self.log_([f"error/shs/【{self.get_date_time()}】: 人群top10 清洗失败", f'{str(e)}'])
+            return False
+
+        return df
 
     # 人群
     def clean_and_transform_crowd_data(self, df):
@@ -1798,15 +1944,8 @@ class base_action:
 
         except Exception as e:
             
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 清洗数据失败, error: {str(e)} ..."
-            )
-            
-            self.email_msg = f"清洗数据失败, error: {str(e)}\n"
-            
-            self.log_(self.log_arr)
-            
-            print(f'# clean_and_transform_crowd_data_bool, error: {str(e)}')
+            print("# 数据清洗失败:", cn, df[cn], e)
+            self.log_([f"error/shs/【{self.get_date_time()}】: 人群 清洗失败", f'{str(e)}'])
             return False
 
         return df
@@ -1825,12 +1964,8 @@ class base_action:
             return engine
 
         except Exception as e:
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 数据库引擎创建失败 {str(e)}... "
-            )
-            self.email_msg = f"数据库引擎创建失败: {str(e)}\n"
-            self.log_(self.log_arr)
-            print(f"数据库引擎创建失败: {str(e)}")
+            print("# 创建数据库引擎失败!")
+            self.log_([f"error/shs/【{self.get_date_time()}】: 创建数据库引擎失败!", f'{str(e)}'])
             return False
 
     def engine_insert_data(self, task_name="【商品每日数据】"):
@@ -1860,20 +1995,19 @@ class base_action:
 
         # print(filelist)
         for filename in filelist:
+            
+            # print(f'开始执行 {filename} 的数据！')
+            
             try:
 
                 excel_data_df = pd.read_excel(
                     f"{self.source_path}/" + filename)
-                
-                self.log_arr.append(
-                    f"info/shs/【{self.get_date_time()}】: 准备写入数据, 文件名: {filename}, 数据总量为：{len(excel_data_df)}"
-                )
                 # print(filename, 'product data: ' + str(len(excel_data_df)))
                 # 这里开始清洗数据
                 if task_name == '【商品流量数据来源】' or task_name == '【店铺流量来源】':
                     match = re.search(r'\[(.*?)\]', filename)
                     source_text = match.group(1)
-                    print(f'# src: {source_text}')
+                    # print(f'# src: {source_text}')
 
                 temptable = "temp"
 
@@ -1912,8 +2046,8 @@ class base_action:
                                             (select 1 from {table} m 
                                             where {"and".join([f" t.{col} = m.{col} " for col in key])}
                                             )"""
-                    print(df_cleaned)
-                    print(transfersql)
+                    # print(df_cleaned)
+                    # print(transfersql)
 
                 elif task_name == "【商品流量数据来源】":
 
@@ -1961,11 +2095,7 @@ class base_action:
                                         (select 1 from {table} m 
                                         where {"and".join([f" t.{col} = m.{col} " for col in key])}
                                         )"""
-                    print(transfersql)
-                    self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: {transfersql}")
-
-                    pass
+                    # print(transfersql)
 
                 elif task_name == '[搜索排行]':
 
@@ -1991,9 +2121,7 @@ class base_action:
                                         (select 1 from {table} m 
                                         where {"and".join([f" t.{col} = m.{col} " for col in key])}
                                         )"""
-                    print(transfersql)
-                    self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: {transfersql}")
+                    # print(transfersql)
 
                 elif task_name == '[人群top10]':
 
@@ -2011,11 +2139,27 @@ class base_action:
                                                keywords=['year_month'])
 
                     if transfersql is False:
-                        print('# [人群top10], sql 拼接失败!')
+                        print('<error>: [人群top10], sql 拼接失败!')
                         return False
-                    
-                    self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: {transfersql}")
+                
+                elif task_name == '[人群top20]':
+
+                    df_cleaned = self.clean_and_transform_crowd_top_20_data(
+                        excel_data_df
+                    )
+
+                    if df_cleaned is False:
+                        return False
+
+                    table_name = 'biz_shop_audience_channel_t20'
+
+                    transfersql = self.insert_data_sql(engine, df_cleaned, table_name,
+                                               key=['year_month'], 
+                                               keywords=['year_month'])
+
+                    if transfersql is False:
+                        print('<error>: [人群top20], sql 拼接失败!')
+                        return False
                 
                 elif task_name == '[人群]':
 
@@ -2033,11 +2177,8 @@ class base_action:
                                                keywords=['year_month'])
 
                     if transfersql is False:
-                        print('# [人群], sql 拼接失败!')
+                        print('<error>: [人群], sql 拼接失败!')
                         return False
-                    
-                    self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: {transfersql}")
 
                 else:
 
@@ -2064,35 +2205,16 @@ class base_action:
                                         (select 1 from {table} m 
                                         where {"and".join([f" t.{col} = m.{col} " for col in key])}
                                         )"""
-                    print(df_cleaned)
-                    print(transfersql)
-                    
-                    self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: {transfersql}")
-
-                self.log_arr.append(
-                    f"info/shs/【{self.get_date_time()}】: 开始写入数据, 如果数据存在就不写入, 写入逻辑在sql中"
-                )
+                    # print(transfersql)
 
                 # print(transfersql)
                 conn.execute(text(transfersql))
 
-                print(f"# sql 已执行！")
-
-                self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: sql执行成功"
-                )
+                # print(f"sql 已执行！")
 
                 conn.execute(text(f"drop table {temptable}"))
-
-                self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: 删除临时表"
-                )
-
-                # 以 网站商品数据为依据
-                # if task_name == '【商品每日数据】':
-                #     shutil.copyfile(f"{self.source_path}/" + filename, f'./commodity_source_data/{filename}')
-                #     pass
+                
+                # print(f"已删除 temp 表！")
 
                 # 将成功写入的文件移入 成功的文件夹
                 shutil.move(
@@ -2100,15 +2222,13 @@ class base_action:
                     f"{self.succeed_path}/" + filename,
                 )
 
-                self.log_arr.append(
-                    f"success/shs/【{self.get_date_time()}】: 将写入成功的文件剪切至  {self.succeed_path}/ {filename}"
-                )
-
-                self.email_msg += f"数据写入总量（以数据库为准，sql执行了，重复的不写入）: {len(excel_data_df)} 条\n"
                 self.engine_insert_data_bool = True
                 data_count += len(excel_data_df)
                 self.excel_data_df_count += len(excel_data_df)
-                time.sleep(1)
+                
+                # print(f'{filename} 已执行完毕！')
+                
+                # time.sleep(0.5)
             
             except Exception as e:
                 
@@ -2118,26 +2238,15 @@ class base_action:
                     f"{self.source_path}/" + filename,
                     f"{self.failure_path}/" + filename,
                 )
-
-                self.log_arr.append(
-                    f"error/shs/【{self.get_date_time()}】: 数据写入失败, 将写入失败的文件剪切至  "
-                    f"{self.failure_path}/ {filename}, error: {str(e)}..."
-                )
-
-                self.log_(self.log_arr, "【店铺流量来源】")
-
-                self.email_msg += f"数据写入失败，已将写入失败的文件剪切至  {self.failure_path}/ {filename} ,  error: {str(e)}"
-                print(f"# 数据写入失败 error: {str(e)}")
+                
+                # print("数据写入失败!")
+                self.log_([f"error/shs/【{self.get_date_time()}】: 数据写入失败!", f'<error>: {str(e)}'])
 
                 continue
-
-            self.log_arr.append(
-                f"info/shs/【{self.get_date_time()}】: 数据写入完毕"
-            )
-            self.email_msg += f"数据总条数: {data_count} 条\n"
-            self.email_msg += f"写入成功的条数: {self.excel_data_df_count} 条\n"
+            
+            # self.email_msg += f"数据总条数: {data_count} 条\n"
+            # self.email_msg += f"写入成功的条数: {self.excel_data_df_count} 条\n"
         
-
     # 写入数据库得封装函数
     def insert_data_sql(self, engine, df_cleaned, table_name, key: list, keywords=None):
 
@@ -2167,10 +2276,66 @@ class base_action:
             print(f'# sql 预览: {sql}')
 
         except Exception as e:
-            print(f'# error: 数据写入失败')
-            print(f'# error: {str(e)}')
+            
+                print("# sql拼接失败!")
+                self.log_([f"error/shs/【{self.get_date_time()}】: sql拼接失败!", f'{str(e)}'])
 
         return sql
+
+     # 写入数据库的方法 [ 直接执行到数据库的方法 ]
+    
+    def insert_data(self, df_cleaned, table_name, key=[], add_col={}, keywords=None):
+        
+        mark = False
+        
+        engine = self.create_engine()
+        
+        if engine:
+            
+            if len(add_col) != 0:
+                for key_, value in add_col.items():
+                    df_cleaned[key_] = value
+            
+            if keywords is None:
+                keywords = []
+            
+            res = False
+            try:
+                temptable = "temp"
+                table = table_name
+
+                df_cleaned.to_sql(
+                    name=temptable, con=engine, index=False, if_exists="replace"
+                )
+
+                sql = f"""insert into {table} ({",".join(df_cleaned.columns)}) 
+                                                select * from {temptable} t 
+                                                where not exists 
+                                                (select 1 from {table} m 
+                                                where {"and".join([f" t.{col} = m.{col} " for col in key])}
+                                                )"""
+
+                for item in keywords:
+                    sql = sql.replace(item, f"`{item}`")
+
+                # print(f'# sql 预览: {sql}')
+                
+                conn = engine.connect()
+            
+                conn.execute(text(sql))
+                
+                conn.execute(text(f"drop table {temptable}"))
+                
+                # print(f'# 数据写入成功。')
+
+                mark = True
+                
+            except Exception as e:
+                
+                print("<error> 数据写入失败!")
+                self.log_([f"error/shs/【{self.get_date_time()}】: 数据写入失败!", f'{str(e)}'])
+
+        return mark
 
     # 数据写入完成后, 执行计算
     def calc(self, start_date_, end_date_):
@@ -2364,6 +2529,7 @@ class base_action:
                 date_range = pd.date_range(start_date, end_date)
                 # 初始化一个集合来跟踪已处理的(product_id, statistic_date)对
                 processed_pairs = set()
+                
                 for date in date_range:
                     calc_date = date.strftime('%Y-%m-%d')
                     result = conn.execute(sql_query, {'end_date': calc_date})
@@ -2393,11 +2559,13 @@ class base_action:
                     # 执行批量插入
                     if batch_data:  # 确保批量数据不为空
                         
+                        print('开始执行 biz_product_classes 表的数据！')
+                        
                         conn.execute(biz_product_classes.insert(), batch_data)
                         # 显式提交事务
                         conn.commit()
                         
-                        print('biz_product_classes 已执行完毕!')   
+                        print('表 biz_product_classes 已执行完毕!')   
                         engine.dispose()
                         mark = True
                 
@@ -2405,52 +2573,63 @@ class base_action:
         except Exception as e:
                         
             print(f'biz_product_classes 执行出错, error: {str(e)}')
+            self.log_([f"error/shs/【{self.get_date_time()}】: biz_product_classes 执行出错!", f'{str(e)}'])
             
         return mark
     
-    # 
     def calc_prepallet(self):
         
-        engine = self.create_engine()
+        mark = False
         
-        sql1 = text("""
-                    UPDATE biz_product_classes bpc1
-                    JOIN biz_product_classes bpc2 
-                    ON bpc1.statistic_date = DATE_ADD(bpc2.statistic_date, INTERVAL 7 DAY) and bpc1.product_id = bpc2.product_id
-                    SET bpc1.pre_pallet = bpc2.pallet
-                    WHERE bpc2.statistic_date IS NOT NULL;
-                    """)
+        try:
         
-        sql2 = text("""
-                    UPDATE biz_product_classes bpc1
-                    JOIN biz_product_classes bpc2 
-                    ON bpc1.statistic_date = DATE_ADD(bpc2.statistic_date, INTERVAL 7 DAY) and bpc1.product_id = bpc2.product_id
-                    SET bpc1.pallet_change = CASE
-                        WHEN bpc1.pallet = bpc2.pallet THEN 0
-                        WHEN bpc1.pallet IS NULL OR bpc2.pallet IS NULL THEN 100
-                        WHEN bpc1.pallet IN ('S', 'A', 'B', 'C', 'D') AND bpc2.pallet IN ('S', 'A', 'B', 'C', 'D') THEN
-                            CASE 
-                                WHEN FIELD(bpc1.pallet, 'S', 'A', 'B', 'C', 'D') > FIELD(bpc2.pallet, 'S', 'A', 'B', 'C', 'D') THEN -1
-                                WHEN FIELD(bpc1.pallet, 'S', 'A', 'B', 'C', 'D') < FIELD(bpc2.pallet, 'S', 'A', 'B', 'C', 'D') THEN 1
-                                ELSE 0
-                            END
-                        ELSE 100
-                    END
-                    WHERE bpc2.statistic_date IS NOT NULL;
-                    """)
-        
-        arr = [sql1, sql2]
-        
-        with engine.connect() as conn:
+            engine = self.create_engine()
             
-            for item in arr:
-                print(f"sql: {item}")
-                conn.execute(item)
-                print(f"执行成功: {item}")
+            sql1 = text("""
+                        UPDATE biz_product_classes bpc1
+                        JOIN biz_product_classes bpc2 
+                        ON bpc1.statistic_date = DATE_ADD(bpc2.statistic_date, INTERVAL 7 DAY) and bpc1.product_id = bpc2.product_id
+                        SET bpc1.pre_pallet = bpc2.pallet
+                        WHERE bpc2.statistic_date IS NOT NULL;
+                        """)
             
-            conn.commit()
+            sql2 = text("""
+                        UPDATE biz_product_classes bpc1
+                        JOIN biz_product_classes bpc2 
+                        ON bpc1.statistic_date = DATE_ADD(bpc2.statistic_date, INTERVAL 7 DAY) and bpc1.product_id = bpc2.product_id
+                        SET bpc1.pallet_change = CASE
+                            WHEN bpc1.pallet = bpc2.pallet THEN 0
+                            WHEN bpc1.pallet IS NULL OR bpc2.pallet IS NULL THEN 100
+                            WHEN bpc1.pallet IN ('S', 'A', 'B', 'C', 'D') AND bpc2.pallet IN ('S', 'A', 'B', 'C', 'D') THEN
+                                CASE 
+                                    WHEN FIELD(bpc1.pallet, 'S', 'A', 'B', 'C', 'D') > FIELD(bpc2.pallet, 'S', 'A', 'B', 'C', 'D') THEN -1
+                                    WHEN FIELD(bpc1.pallet, 'S', 'A', 'B', 'C', 'D') < FIELD(bpc2.pallet, 'S', 'A', 'B', 'C', 'D') THEN 1
+                                    ELSE 0
+                                END
+                            ELSE 100
+                        END
+                        WHERE bpc2.statistic_date IS NOT NULL;
+                        """)
+            
+            arr = [sql1, sql2]
+            
+            with engine.connect() as conn:
+                
+                for item in arr:
+                    
+                    print(f"表 biz_product_classes 开始执行: {item}")
+                    conn.execute(item)
+                    print(f"表 biz_product_classes 执行成功: {item}")
+                
+                conn.commit()
+            
+            mark = True
+                
+        except Exception as e:
+            print(f'calc_prepallet 执行出错, error: {str(e)}')
+            self.log_([f"error/shs/【{self.get_date_time()}】: calc_prepallet 执行出错!", f'{str(e)}'])
         
-        pass
+        return mark
     
     # 删除 biz_pallet_product 并从视图 v_pallet_product 重新写入
     def insert_biz_pallet_product_from_v_pallet_product(self):
@@ -2489,7 +2668,8 @@ class base_action:
             
         except Exception as e:
             
-            print(f'biz_pallet_product, 执行失败! {str(e)}')
+            print(f'biz_pallet_product 执行出错, error: {str(e)}')
+            self.log_([f"error/shs/【{self.get_date_time()}】: biz_pallet_product 执行出错!", f'{str(e)}'])
         
         return mark
     
@@ -2507,12 +2687,12 @@ class base_action:
         return formatted_datetime
 
     # 获取前一天的日期
-    def get_before_day_datetime(self, tag="b"):
+    def get_before_day_datetime(self, tag="b", days_=1):
         # 获取当前日期
         current_date = datetime.now()
 
         # 计算前一天日期
-        previous_date = current_date - timedelta(days=1)
+        previous_date = current_date - timedelta(days=days_)
 
         today = current_date.strftime("%Y-%m-%d")
         before_day = previous_date.strftime("%Y-%m-%d")
@@ -2524,30 +2704,31 @@ class base_action:
             return today
         else:
             return before_day
+    
+    def log_(self, msg_arr, type='error'):
 
-        pass
-
-    def log_(self, msg_arr, task_name="【商品每日数据】"):
-
-        self.log_writer(msg_arr, task_name)
+        self.log_writer(msg_arr, type=type)
 
     def append_logArr(self, msg, separator="/shs/", type_="info"):
         self.log_arr.append(
             f"{type_}{separator}【{self.get_date_time()}】: {msg}")
         pass
 
-    def log_writer(self, msg_arr, task_name):
+    def log_writer(self, msg_arr, type='error'):
 
         with open(
-            f'{self.logger_path}/log-{self.get_date_time(res="%Y-%m-%d")}.txt',
-            "w",
+            f'{self.logger_path}/log-{type}&&{self.get_date_time(res="%Y-%m-%d")}.txt',
+            "a+",
             encoding="utf-8",
         ) as f:
             for item in msg_arr:
                 item_ = item.split("/shs/")
+                if len(item_) <= 1:
+                    f.write(item_[0])
+                    continue
                 tag = item_[0]
                 msg = item_[1]
-                str_ = f"""# {tag} /【生意参谋平台】/{task_name} /  {msg} \n \n"""
+                str_ = f"""# {tag} /【生意参谋平台】/ {msg} \n \n"""
                 f.write(str_)
         pass
 
@@ -2698,16 +2879,27 @@ class base_action:
         print("邮件发送成功~！")
 
     # 店铺流量来源
-    def sycm_shop_flow_source(self):
+    def sycm_shop_flow_source(self, config_):
 
+        browserPort = 'browserPort'
+        self.get_configs(browserPort, config_name=config_)
+        port = self.config_obj['port']
+        
         config_str = "sycmShopTrafficSource"
-        self.get_config(config_str)
-
+        self.get_config_bool = self.get_configs(config_str, config_name=config_)
+        
         if self.get_config_bool is False:
-            print("# error：配置项读取失败~")
+            print("<error>：配置项读取失败~")
             return
 
-        page = WebPage()
+        # co = ChromiumOptions()
+        print(f'{self.config_obj["shop_name"]}: <info> 开始执行 [店铺流量来源]!')
+        
+        co = self.set_ChromiumOptions()
+
+        co.set_address(f'127.0.0.1:{port}')
+
+        page = WebPage(chromium_options=co)
 
         # 判断是否 登录
         if page.url == "chrome://newtab/":
@@ -2721,7 +2913,7 @@ class base_action:
         self.log_arr.clear()
         self.email_msg = ""
 
-        print("程序开始自动化 店铺流量来源！")
+        # print("程序开始自动化 店铺流量来源！")
         self.email_msg = "任务名称：店铺流量来源\n"
         # 开始登录
         self.sycm_login()
@@ -2765,32 +2957,51 @@ class base_action:
         # # 写入数据库
         self.engine_insert_data(task_name="【店铺流量来源】")
         # # 写入日志
-        self.log_(self.log_arr, task_name="【店铺流量来源】")
+        # self.log_(self.log_arr, task_name="【店铺流量来源】")
 
-        print("程序执行成功， 执行结果请查看 log！")
+        # print("程序执行成功， 执行结果请查看 log！")
 
-        self.email_msg += "任务执行完毕：执行详细过程请查看log日志\n"
-        self.email_msg += "******************************\n"
-        print("开始发送邮件~！")
-        self.email_msg_arr.clear()
-        self.email_msg_arr.append(self.email_msg)
-        self.send_email("【生意参谋平台】/ 店铺流量来源", self.email_msg_arr)
-        print("邮件发送成功~！")
+        # self.email_msg += "任务执行完毕：执行详细过程请查看log日志\n"
+        # self.email_msg += "******************************\n"
+        # print("开始发送邮件~！")
+        # self.email_msg_arr.clear()
+        # self.email_msg_arr.append(self.email_msg)
+        # self.send_email("【生意参谋平台】/ 店铺流量来源", self.email_msg_arr)
+        # print("邮件发送成功~！")
 
         pass
 
     # --------------------------------------为调用简单而封装
     # 执行程序的封装处理
     # 访问 sycm
-    def visit_sycm(self, task_name="【店铺流量来源】"):
+    def visit_sycm(self, task_name="【店铺流量来源】", config=''):
 
         self.log_arr.clear()
         self.email_msg = ""
         
         mark = False
+        
+        # print(f"程序开始自动化 {task_name}！")
+        
+        obj = self.get_configs_return_obj(key='browserPort', config_name=config)
+        
+        if obj is False:
+            print('<error> 没有端口号，不能启动!')
+        else:
+            port = obj['port']
+            # print(f'端口号：{port}')
+            
+        # co = ChromiumOptions()
+        
+        co = self.set_ChromiumOptions()
+
+        co.set_address(f'127.0.0.1:{port}')
 
         try:
-            page = WebPage()
+            page = WebPage(chromium_options=co)
+            
+            # print(f'1. browser_id: {page._browser_id} && tab_id: {page.tab_id} && browser_url: {page._browser_url} && {page.tabs_count}')
+            
             # 判断是否 登录
             if page.url == "chrome://newtab/":
                 page.get(self.config_obj["url"])
@@ -2801,36 +3012,41 @@ class base_action:
                 self.visit_bool = True
 
             mark = True
-
+            # print('访问生意参谋成功！')
+            
         except Exception as e:
-
-            print(f"访问生意参谋失败, error: {str(e)}")    
-
-            self.log_arr.append(
-                f"error/shs/【{self.get_date_time()}】: 访问生意参谋失败, error: {str(e)}"
-            )
-
-            self.log_(self.log_arr, task_name)
+ 
+            self.log_([f"error/shs/【{self.get_date_time()}】: 生意参谋访问失败, 下面为错误信息."])
+            self.log_([f"error/shs/【{self.get_date_time()}】: <error> {str(e)}"])
 
         return mark
 
     # 登录生意参谋
     def login_sycm(self, task_name="商品每日数据"):
+        
         mark = False
-
-        print(f"程序开始自动化 {task_name}！")
-        self.email_msg = f"任务名称：{task_name}\n"
 
         # 开始登录
         self.sycm_login(task_name=task_name)
 
         if self.login_bool:
+            
             mark = True
+            # print(f'登录成功！')
+            
+            # 检查是否需要发送验证码
+            code_ = self.page('#J_GetCode')
+            if code_:
+                code_.click()
+                # 开始等待用户输入验证码
+                # input('请在页面上输入验证码以后，输入随意字符继续任务：')
+                self.page.wait(1200)
         else:
-            self.email_msg += "访问生意参谋: 访问或者登录失败\n"
+
+            self.log_([f"error/shs/【{self.get_date_time()}】: 访问或者登录失败!"])
 
         return mark
-
+    
     # 创建存储数据的文件夹
     def create_storage_data_folder(self):
         mark = False
@@ -2940,8 +3156,8 @@ class base_action:
         
         # 开始计算 biz_pallet_product
         if False:
-            self.calc_start_date = '2024-03-25'
-            self.calc_end_date = '2024-03-28'
+            self.calc_start_date = '2024-04-08'
+            self.calc_end_date = '2024-04-08'
         
         res = self.calc(start_date_=self.calc_start_date, end_date_=self.calc_end_date)
         
@@ -2961,15 +3177,17 @@ class base_action:
         self.send_emails(theme="商品流量数据来源")
 
         # 写入日志
-        self.log_(self.log_arr, task_name="【商品数据来源】")
+        # self.log_(self.log_arr, task_name="【商品数据来源】")
 
     def wanxiang_table(self, table_name):
-        config_str = table_name
-        self.get_config(config_str)
+        
+        # config_str = table_name
+        
+        # self.get_config(config_str)
 
-        if self.get_config_bool is False:
-            print("# error：配置项读取失败~")
-            return
+        # if self.get_config_bool is False:
+        #     print("# error：配置项读取失败~")
+        #     return
 
         if (
             "https" in self.config_obj["excel_url"]
@@ -2979,7 +3197,7 @@ class base_action:
             pass
         else:
             # 手动方式excel_url
-            excel_url = self.config_obj["excel_url"]
+            excel_url = self.source_path
             file_list = []
 
             if table_name == 'wanxiang_product':
@@ -3075,12 +3293,15 @@ class base_action:
                                         (select 1 from {table} m
                                         where {"and".join([f" t.{col} = m.{col} " for col in key])}
                                         )"""
-                    print(clean_df)
-                    print(f"# sql 已拼接完成：{transfersql}")
+                    # print(clean_df)
+                    # print(f"# sql 已拼接完成：{transfersql}")
                     conn.execute(text(transfersql))
                     conn.execute(text(f"drop table {temptable}"))
-                    print(f"# {table_name}, sql 执行成功")
-                    
+                    print(f"# {file}, sql 执行成功")
+                    shutil.move(
+                        f"{self.source_path}/" + file,
+                        f"{self.succeed_path}/" + file,
+                    )
                 except Exception as e:
                     
                     print(f"# {table_name}, sql 执行失败")
@@ -3097,13 +3318,186 @@ class base_action:
                         ]
                     )
                     print("错误信息：" + str(e))
+                    shutil.move(
+                        f"{self.source_path}/" + file,
+                        f"{self.failure_path}/" + file,
+                    )
         pass
 
+    # 检验是否是数字
+    def is_number(self, param):
+        # 使用正则表达式匹配数字的模式
+        pattern = r'^[-+]?[0-9]*\.?[0-9]+$'
+        return re.match(pattern, param)
+    
+    # 返回一个修改过参数的新的url
+    def new_url(self, dict_: dict, oldurl):
+    
+        obj = {}
+        
+        try:
+            # 解析 URL
+            parsed_url = urlparse(oldurl)
+            query_params = parse_qs(parsed_url.query)
+            
+            for key, value in dict_.items():
+                # print(key, value)
+                query_params[key] = [value]
+            
+            # 将查询参数转换回查询字符串
+            new_query = urlencode(query_params, doseq=True)
+            
+            # 重建 URL
+            new_url = urlunparse((
+                parsed_url.scheme,
+                parsed_url.netloc,
+                parsed_url.path,
+                parsed_url.params,
+                new_query,
+                parsed_url.fragment
+            ))
+            
+            obj['mark'] = True
+            obj['url'] = new_url
+            
+        except Exception as e:
+            
+            obj['mark'] = False
+            obj['url'] = str(e)
+        
+        return obj
+    
+    # 修改和新增biz_product
+    def update_biz_product(self, date_=''):
+               
+        mark = False
+        
+        str_ = '(SELECT MAX(statistic_date) FROM biz_product_performance)' if date_ == '' else date_ 
+        
+        sql1 = text(f"""
+                    UPDATE biz_product bp
+                    JOIN (
+                        SELECT 
+                            bpp.product_id, 
+                            bpp.product_status
+                        FROM biz_product_performance bpp
+                        WHERE bpp.statistic_date = {str_}
+                    ) as latest_status ON bp.product_id = latest_status.product_id
+                    SET bp.product_status = latest_status.product_status;
+                    """)
+        
+        sql2 = text(f"""
+                    INSERT INTO biz_product (product_id, product_status, responsible, product_name, product_alias, shop_name, shop_id)
+                    SELECT 
+                        bpp.product_id, 
+                        bpp.product_status,
+                        '{self.config_obj["principal"]}',
+                        product_name,
+                        sku,
+                        shop_name,
+                        shop_id
+                    FROM biz_product_performance bpp
+                    WHERE bpp.statistic_date = {str_}
+                    AND NOT EXISTS (
+                        SELECT 1 FROM biz_product WHERE product_id = bpp.product_id
+                    );
+                    """)
+        
+        engine = self.create_engine()
+        
+        if engine is False:
+            return
+        
+        try:
+            
+            with engine.connect() as conn:
+                
+                conn.execute(sql1)
+                
+                conn.execute(sql2)
+                
+                conn.commit()
+            
+            engine.dispose()
+
+            mark = True
+            
+        except Exception as e:
+            
+            self.log_([f"error/shs/【{self.get_date_time()}】: biz_pallet_product 执行出错!", f'{str(e)}'])
+        
+        return mark
+    
+    # 拿到商品ID的数据
+    def get_item_id(self, date_):
+        
+        obj = {}
+        res = ''
+        arr = []
+        date_str = date_.strftime("%Y-%m-%d")
+        
+        sql = text(f"select product_id from biz_product_performance where product_status = '当前在线' and statistic_date = '{date_str}'")
+        
+        engine = self.create_engine()
+        
+        if engine is False:
+            obj['mark'] = False
+            obj['result'] = 'engin error'
+            return
+        
+        try:
+            with engine.connect() as conn:
+                
+                res = conn.execute(sql)
+            
+            for row in res:
+                arr.append(row[0])
+            
+            obj['mark'] = True
+            obj['result'] = arr
+            
+            return obj
+        
+        except Exception as e:
+            
+            obj['mark'] = False
+            obj['result'] = str(e)
+            return obj
+    
+    # 日志模块
+    def logging(self, msg, mode='info'):
+        # 配置日志输出的格式
+        logging.basicConfig(
+            filename=f"{self.logger_path}/app.log",
+            format='%(asctime)s - %(levelname)s - %(message)s', 
+            datefmt='%Y-%m-%d %H:%M:%S',
+            level=logging.INFO  # 设置日志级别为 INFO
+        )
+        # 记录日志信息
+        if mode == 'debug':
+            
+            logging.debug(msg)
+            
+        elif mode == 'info':
+            
+            logging.info(msg)
+            
+        elif mode == 'warning':
+            
+            logging.warning(msg)
+            
+        elif mode == 'error':
+            
+            logging.error(msg)
+            
+        else:
+            logging.critical(msg)
+    
     def run(self):
         # 商品每日数据  每天
-        self.sycm_commodity_everyday_data()
+        # self.sycm_commodity_everyday_data()
         # 店铺流量数据  每天
-        self.sycm_shop_flow_source()
+        # self.sycm_shop_flow_source()
 
         # 宝贝主体报表 (数据库表名命名) 每月
         # self.wanxiang_table(table_name='wanxiang_product')
@@ -3114,14 +3508,50 @@ class base_action:
         # self.wanxiang_table(table_name='wanxiang_keywords')
 
         # 商品流量数据  每天
-        self.commodity_data_source()
+        # self.commodity_data_source()
+        
+        self.get_config_name()
+    
+    def set_ChromiumOptions(self):
+        
+        co = ChromiumOptions()
+        
+        # 禁止所有弹出窗口
+        co.set_pref(arg='profile.default_content_settings.popups', value='0')
+        
+        # 隐藏是否保存密码的提示
+        co.set_pref('credentials_enable_service', False)
+        
+        return co
 
-    # 检验是否是数字
-    def is_number(self, param):
-        # 使用正则表达式匹配数字的模式
-        pattern = r'^[-+]?[0-9]*\.?[0-9]+$'
-        return re.match(pattern, param)
-
+    # 检查是否需要重新开启浏览器或者访问需要的网址
+    def whether_the_url_exists_in_the_browser(self, page, url_str):
+        
+        if url_str in page._browser_url:
+            
+            return {
+                'mark': True,
+                'url': page._browser_url,
+                'browser_id': page.tab_id,
+                'msg': 'url已存在'
+            }
+            
+        else:
+            
+            return {
+                'mark': False,
+                'url': page._browser_url,
+                'browser_id': page.tab_id,
+                'msg': 'url不存在'
+            }
+            
+    def test_action(self, date_):
+        self.get_configs('sycmCommodityEverydayData')
+        res = self.get_item_id(date_=date_)
+        print(res['result'])
+        print(len(res['result']))
+        # for row in res['result']:
+        #     print(row)
 
 if __name__ == "__main__":
     test = base_action()

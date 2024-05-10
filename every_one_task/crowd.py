@@ -6,14 +6,15 @@ import json
 import re
 import pandas as pd
 import calendar
-import base_action
+from .base_action import base_action
 from datetime import datetime, timedelta
 
 
 class crowd:
-    def __init__(self):
-        self.base_action_instance = base_action.base_action()
+    def __init__(self, config):
+        self.base_action_instance = base_action()
         self.inst_ = self.base_action_instance
+        self.config = config
         self.start_month = ''
         # crowd_type
         self.crowd_type = {
@@ -57,25 +58,25 @@ class crowd:
         res = self.get_config()
 
         if res is False:
-            print('# error: 读取配置文件出错，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群] 读取配置文件出错，请检查。')
             return False
 
         res = self.create_folder()
 
         if res is False:
-            print('# error: 创建存储文件出错，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群] 创建存储文件出错，请检查。')
             return False
 
-        res = self.inst_.visit_sycm(task_name="[人群]")
+        res = self.inst_.visit_sycm(task_name="[人群]", config=self.config)
 
         if res is False:
-            print('# 访问生意参谋失败，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群] 访问生意参谋失败，请检查。')
             return False
 
         # 登录
         res = self.inst_.sycm_login(task_name='[人群]')
         if res is False:
-            print('# 登录失败，请检查！')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群] 登录失败，请检查！')
             return False
 
         return True
@@ -90,7 +91,7 @@ class crowd:
         res = self.visit_sycm()
 
         if res is False:
-            print('# crowd: 生意参谋访问失败~ ')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群] 生意参谋访问失败~ ')
             return mark
 
         """
@@ -129,7 +130,7 @@ class crowd:
         
         if False:
             year_str = '2024'
-            month_str = '01'
+            month_str = '03'
             last_day_str = '31'
 
         url = self.inst_.config_obj['second_level_url']
@@ -181,25 +182,36 @@ class crowd:
                     
                     obj_arr.append(obj)
 
-                print(f'# 数据总预览: {obj_arr}')
+                # print(f'# 数据总预览: {obj_arr}')
 
                 # 将拿到的数据写入到本地存储
-                self.inst_.pandas_insert_data(obj_arr,
+                res = self.inst_.pandas_insert_data(obj_arr,
                                               f'{self.inst_.source_path}/[生意参谋平台][人群]&&'
                                               f'{year_str}-{month_str}.xlsx')
-
+                # if res['mark']:
+                #     print(f"[人群top10], {res['msg']}")
+                    
                 # 写入DB
                 res = self.inst_.engine_insert_data(task_name='[人群]')
 
                 if res is False:
-                    print(f'# 数据写入失败!')
+                    print(f'{self.base.config_obj["shop_name"]}: <error> [人群] 数据写入失败!')
                 else:
                     mark = True
 
         return mark
 
     def run(self):
-        self.get_crowd_data()
+        
+        print(f'{self.base.config_obj["shop_name"]}: <info> 开始执行 人群!')
+        
+        res = self.get_crowd_data()
+        
+        if res is False:
+            return
+        
+        print(f'{self.base.config_obj["shop_name"]}: <info> 执行完毕 人群!')
+        
 
     def test(self):
         self.inst_.page.get('https://www.baidu.com')

@@ -1,123 +1,28 @@
 """
-    商品每日数据
+    店铺流量来源
 """
 import random
 import json
 import re
 import pandas as pd
 import calendar
-import base_action
+from .base_action import base_action
 from datetime import datetime, timedelta
 
 class shop_traffic:
     
-    def __init__(self) -> None:
-        self.base = base_action.base_action()
-        self.task_name = "【店铺流量来源】"
-        self.config_name = 'sycmShopTrafficSource'
+    def __init__(self, config) -> None:
+        self.base = base_action()
+        self.config = config
         pass
     
-    def get_config(self):
-        
-        mark = False
-        
-        res = self.base.get_configs(self.config_name)
-
-        if res:
-            # print(self.inst_.config_obj)
-            mark = True
-        else:
-            print('# 获取配置信息失败!')
-        
-        return mark
+    # 由于最早在 base_action 里面已经写好了该类的方法， 故直接调用base_action里面的方法， 不再另做修改, 只做提任务类提取处理.
     
-    # 创建存储数据的文件
-    def create_folder(self):
-
-        res = self.base.create_folder("D:", self.base.config_obj["excel_storage_path"])
-
-        return res
-    
-    def visit_sycm(self):
-        
-        res = self.get_config()
-
-        if res is False:
-            print('# error: 读取配置文件出错，请检查。')
-            return False
-
-        res = self.create_folder()
-
-        if res is False:
-            print('# error: 创建存储文件出错，请检查。')
-            return False
-
-        res = self.base.visit_sycm(task_name=self.task_name)
-
-        if res is False:
-            print('# 访问生意参谋失败，请检查。')
-            return False
-
-        # 登录
-        res = self.base.login_sycm(task_name=self.task_name)
-        
-        if res is False:
-            print('# 登录失败，请检查！')
-            return False
-
-        return True
-    
-    # 下载excel
-    def down_load_excel(self):
-        
-        if self.base.config_obj['automatic_date'] == '自动计算前一天':
-            automatic_date = True
-        else:
-            automatic_date = False
-            
-        res = self.base.down_load_excel_data(automatic_date=automatic_date, task_name=self.task_name)
-        
-        if res is False:
-            return False
-
-        return True
-    
-    def db_insert_data(self):
-        
-        res = self.base.insert_data_in_db(task_name=self.task_name)
-        
-        if res is False:
-            return False
-        
-        return True
-    
-    def write_log(self):
-        
-        self.base.log_(self.base.log_arr)
-    
-    def send_email(self):
-        
-       self.base.send_emails()
-       
     def run(self):
         
-        res = self.visit_sycm()
+        self.base.sycm_shop_flow_source(self.config)
         
-        if res is False:
-            self.send_email()
-            return
-        
-        res = self.down_load_excel()
-        
-        if res is False:
-            self.send_email()
-            return
-        
-        res = self.db_insert_data()
-        
-        if res is False:
-            self.send_email()
-            return
+        print(f'{self.base.config_obj["shop_name"]}: <info> 执行完毕 [店铺流量来源]!')
     
 if __name__ == "__main__":
     test = shop_traffic()

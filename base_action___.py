@@ -14,6 +14,7 @@ import concurrent.futures
 from sqlalchemy import create_engine, text
 import pandas as pd
 from io import BytesIO
+from pathlib import Path
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 import configparser
@@ -180,7 +181,6 @@ class base_action:
     # get port
     def get_port(self):
         return self.__find_free_port()
-        pass
 
     def sycm_login(self, task_name="【商品每日数据】"):
         
@@ -1787,7 +1787,7 @@ class base_action:
 
     # 创建数据库引擎
     def create_engine(self):
-
+        
         try:
             self.log_arr.append(
                 f"info/shs/【{self.get_date_time()}】: 开始创建数据库引擎 ..."
@@ -1805,7 +1805,7 @@ class base_action:
             self.email_msg = f"数据库引擎创建失败: {str(e)}\n"
             self.log_(self.log_arr)
             print(f"数据库引擎创建失败: {str(e)}")
-        pass
+            return False
 
     def engine_insert_data(self, task_name="【商品每日数据】"):
 
@@ -2009,9 +2009,9 @@ class base_action:
                     df_cleaned = self.clean_and_transform_product_data(
                         excel_data_df)
                     
-                    df_cleaned.to_excel(
-                        f'./output.xlsx',
-                        index=False, engine='xlsxwriter')
+                    # df_cleaned.to_excel(
+                    #     f'./output.xlsx',
+                    #     index=False, engine='xlsxwriter')
                                         
                     table = "biz_product_performance"
                     key = ["product_id", "statistic_date"]
@@ -2097,7 +2097,7 @@ class base_action:
 
     # 写入数据库得封装函数
     def insert_data_sql(self, engine, df_cleaned, table_name, key: list, keywords=None):
-
+        
         if keywords is None:
             keywords = []
 
@@ -2124,10 +2124,65 @@ class base_action:
             print(f'# sql 预览: {sql}')
 
         except Exception as e:
+            
             print(f'# error: 数据写入失败')
             print(f'# error: {str(e)}')
 
         return sql
+    
+    # 写入数据库的方法 [ 直接执行到数据库的方法 ]
+    def insert_data(self, df_cleaned, table_name, key=[], add_col={}, keywords=None):
+        
+        mark = False
+        
+        engine = self.create_engine()
+        
+        if engine:
+            
+            if len(add_col) != 0:
+                for key_, value in add_col.items():
+                    df_cleaned[key_] = value
+            
+            if keywords is None:
+                keywords = []
+            
+            res = False
+            try:
+                temptable = "temp"
+                table = table_name
+
+                df_cleaned.to_sql(
+                    name=temptable, con=engine, index=False, if_exists="replace"
+                )
+
+                sql = f"""insert into {table} ({",".join(df_cleaned.columns)}) 
+                                                select * from {temptable} t 
+                                                where not exists 
+                                                (select 1 from {table} m 
+                                                where {"and".join([f" t.{col} = m.{col} " for col in key])}
+                                                )"""
+
+                for item in keywords:
+                    sql = sql.replace(item, f"`{item}`")
+
+                print(f'# sql 预览: {sql}')
+                
+                conn = engine.connect()
+            
+                conn.execute(text(transfersql))
+                
+                conn.execute(text(f"drop table {temptable}"))
+                
+                print(f'# 数据写入成功。')
+
+                mark = True
+                
+            except Exception as e:
+                
+                print(f'# error: 数据写入失败')
+                print(f'# error: {str(e)}')
+
+        return mark
 
     def get_date_time(self, res="%Y-%m-%d %H:%M:%S"):
         # 获取当前日期和时间
@@ -2161,8 +2216,6 @@ class base_action:
         else:
             return before_day
 
-        pass
-
     def log_(self, msg_arr, task_name="【商品每日数据】"):
 
         self.log_writer(msg_arr, task_name)
@@ -2191,54 +2244,54 @@ class base_action:
         # 先检查盘符是否存在
         if os.path.exists(hard_drive):
             path = f"{hard_drive}{folder_path}"
-
-            if not os.path.exists(path):
-
-                os.makedirs(path)
-                print(f"# 创建文件夹，{path} 所需文件夹已创建！")
-            else:
-                print(f"# 创建文件夹，{path} 文件夹已存在，无需创建！")
-
-            # source
-            path_ = f"{path}/source"
-            if not os.path.exists(path_):
-                os.makedirs(path_)
-
-            self.source_path = path_
-
-            path_ = f"{path}/succeed"
-            if not os.path.exists(path_):
-                os.makedirs(path_)
-
-            self.succeed_path = path_
-
-            path_ = f"{path}/failure"
-            if not os.path.exists(path_):
-                os.makedirs(path_)
-
-            self.failure_path = path_
-
-            path_ = f"{path}/failure/txt"
-            if not os.path.exists(path_):
-                os.makedirs(path_)
-
-            path_ = f"{path}/log"
-            if not os.path.exists(path_):
-                os.makedirs(path_)
-
-            self.logger_path = path_
-
-            self.create_folder_bool = True
-
-            return True
-
         else:
+            current_path = Path.cwd()
+            current_drive = str(current_path.drive)
+            self.current_drive = current_drive
+            path = f"{self.current_drive}{folder_path}"
 
-            print(f"# 创建文件夹，{hard_drive} 盘符不存在，请检查！")
-            return False
+        if not os.path.exists(path):
 
-        pass
+            os.makedirs(path)
+            print(f"# 创建文件夹，{path} 所需文件夹已创建！")
+                
+        else:
+                
+            print(f"# 创建文件夹，{path} 文件夹已存在，无需创建！")
 
+        # source
+        path_ = f"{path}/source"
+        if not os.path.exists(path_):
+            os.makedirs(path_)
+
+        self.source_path = path_
+
+        path_ = f"{path}/succeed"
+        if not os.path.exists(path_):
+            os.makedirs(path_)
+
+        self.succeed_path = path_
+
+        path_ = f"{path}/failure"
+        if not os.path.exists(path_):
+            os.makedirs(path_)
+
+        self.failure_path = path_
+
+        path_ = f"{path}/failure/txt"
+        if not os.path.exists(path_):
+            os.makedirs(path_)
+
+        path_ = f"{path}/log"
+        if not os.path.exists(path_):
+            os.makedirs(path_)
+
+        self.logger_path = path_
+
+        self.create_folder_bool = True
+
+        return True
+    
     def send_email(self, theme, email_msg_arr):
 
         mark = False
@@ -2335,7 +2388,6 @@ class base_action:
         print("邮件发送成功~！")
 
     # 店铺流量来源
-
     def sycm_shop_flow_source(self):
 
         config_str = "sycmShopTrafficSource"
@@ -2464,7 +2516,6 @@ class base_action:
             mark = True
 
         return mark
-        pass
 
     # 创建存储数据的文件夹
     def create_storage_data_folder(self):
@@ -2497,7 +2548,6 @@ class base_action:
             tag = True
 
         return tag
-        pass
 
     # 写入数据库
     def insert_data_in_db(self, task_name="【商品每日数据】"):
@@ -2509,7 +2559,6 @@ class base_action:
             mark = True
 
         return mark
-        pass
 
     # 开始发送邮件
     def send_emails(self, theme="商品每日数据"):
@@ -2520,7 +2569,6 @@ class base_action:
         res = self.send_email(f"【生意参谋平台】/ {theme}", self.email_msg_arr)
 
         return res
-        pass
 
     # --------------------------------------仅此而已
 
@@ -2727,9 +2775,9 @@ class base_action:
 
     def run(self):
         # 商品每日数据  每天
-        self.sycm_commodity_everyday_data()
+        # self.sycm_commodity_everyday_data()
         # 店铺流量数据  每天
-        self.sycm_shop_flow_source()
+        # self.sycm_shop_flow_source()
 
         # 宝贝主体报表 (数据库表名命名) 每月
         # self.wanxiang_table(table_name='wanxiang_product')
@@ -2747,7 +2795,6 @@ class base_action:
         # 使用正则表达式匹配数字的模式
         pattern = r'^[-+]?[0-9]*\.?[0-9]+$'
         return re.match(pattern, param)
-        pass
 
 
 if __name__ == "__main__":
