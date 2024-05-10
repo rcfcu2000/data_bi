@@ -24,6 +24,7 @@ import every_one_task.biz_shop_experience_score as bses
 import every_one_task.biz_product_dayinfo as bpd
 import every_one_task.biz_shop_content as bsc
 import every_one_task.biz_shop_customer_service as bscs
+import every_one_task.biz_shop_level as bpd
 
 # 程序是立即执行还是定时执行 immediate_execution代表立即执行, timed_execution 代表定时执行
 pattern = 'immediate_execution'
@@ -87,6 +88,10 @@ def run_task(item):
 
     # 内容渠道效果
     #bsc.biz_shop_content(config=item).run()
+    #bpd.biz_shop_level(config=item).run()
+    
+    # 内容渠道效果
+    # bsc.biz_shop_content(config=item).run()
     
     # 商品体验分
     # bses.biz_shop_experience_score(config=item).run()

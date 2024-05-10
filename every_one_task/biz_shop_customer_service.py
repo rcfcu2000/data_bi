@@ -26,7 +26,7 @@ class biz_shop_customer_service:
         self.get_config_bool = self.base.get_configs(self.__class__.__name__, config_name=self.config)
         
         # 获取配置文件中公用配置的对象
-        self.base_config = self.base.get_configs_return_obj('base_config', config_name=self.config)
+        #self.base_config = self.base.get_configs_return_obj('base_config', config_name=self.config)
         self.create_folder_bool = self.base.create_folder("D:", self.base.config_obj['excel_storage_path'])
         
         # 检查并拿到 pageTab [根据需要修改的参数]
@@ -59,7 +59,7 @@ class biz_shop_customer_service:
                 print(f'# {self.shop_name}{self.task_name} <error> 创建存储文件出错，请检查。')
                 return False
 
-            port = self.base.config_obj.get('port', self.base_config['port'])    
+            port = self.base.config_obj.get('port', self.base.config_obj['port'])    
             
             co = self.base.set_ChromiumOptions()
 
@@ -91,19 +91,65 @@ class biz_shop_customer_service:
                 'msg': f'# {self.shop_name}{self.task_name} <info> 访问失败！'
             }
     
+    def clean_and_transform_shop_cs_data(self, excel_data_df):
+        """
+        Transforms the Excel data to align with the 'biz_shop_customer_service' database table schema.
+
+        :param excel_data_df: DataFrame containing the Excel data.
+        :return: Transformed DataFrame ready for database insertion.
+        """
+        # Rename columns to match the database schema
+        column_mappings = {
+            '日期': 'statistic_date',
+            '咨询人数': 'inquiry_count',
+            '平均响应时长（秒)': 'avg_response_time',
+            '客户满意率': 'customer_satisfaction_rate',
+            '客服销售额': 'sales_revenue',
+            '客服销售人数': 'sales_count',
+            '客服销售额占比': 'sales_revenue_ratio',
+            '客服销售客单价': 'sales_unit_value',
+            '询单转化率': 'inquiry_conversion_rate'
+        }
+        transformed_df = excel_data_df.rename(columns=column_mappings)
+
+        transformed_df = transformed_df[transformed_df.iloc[:, 0] != '汇总值']
+
+        # Convert date format from float to YYYY-MM-DD (if necessary)
+        try:
+            transformed_df['statistic_date'] = pd.to_datetime(transformed_df['statistic_date'], format='%Y%m%d')
+            transformed_df['statistic_date'] =  transformed_df['statistic_date'].apply(lambda x:x.strftime('%Y-%m-%d')) 
+            transformed_df['inquiry_conversion_rate'] =  transformed_df['inquiry_conversion_rate'].apply(lambda x:0.0 if x == '延时统计' else x) 
+        except Exception as ex:
+            print(ex)
+
+        # 将包含逗号的字符串字段转换为整数
+        columns_to_convert = [
+            'inquiry_count', 'sales_count', 
+        ]
+
+        for column in columns_to_convert:
+            try:
+                transformed_df[column] = transformed_df[column].apply(lambda x : 0.0 if x == '-' else x)
+                transformed_df[column] = transformed_df[column].replace({',': ''}, regex=True).astype('int64')
+            except Exception as e:
+                #print(column, e)
+                transformed_df[column] = 0
+
+        return transformed_df
+
     def down_load_excel(self):
         
-        date_format = "%Y-%m-%d"
+        date_format = "%Y%m%d"
         
         date_range = []
         
         self.page.change_mode('s')
         
-        if self.base.config_obj['automatic_date'] == '自动计算前一天' or self.base_config['automatic_date'] == '自动计算前一天':
+        if self.base.config_obj['automatic_date'] == '自动计算前一天' or self.base.config_obj['automatic_date'] == '自动计算前一天':
             before_day = self.base.get_before_day_datetime()
             date_range = pd.date_range(before_day, before_day)
         else:
-            date_range = pd.date_range(self.base.config_obj.get('start_date', self.base_config['start_date']), self.base.config_obj.get('end_date', self.base_config['end_date']))
+            date_range = pd.date_range(self.base.config_obj.get('start_date', self.base.config_obj['start_date']), self.base.config_obj.get('end_date', self.base.config_obj['end_date']))
         
         # 重试
         url = self.base.config_obj['second_level_url']
@@ -120,11 +166,23 @@ class biz_shop_customer_service:
             
             new_url = self.base.new_url(dict_={'startDate': f'{start_date}', 'endDate': f'{end_date}'}, oldurl=url)
             
-            print(f"{self.base_config['shop_name']}{self.task_name}: 开始获取 {end_date} 的数据, 链接：{new_url}")
+            print(f"{self.base.config_obj['shop_name']}{self.task_name}: 开始获取 {end_date} 的数据, 链接：{new_url}")
             
-            self.page.get(new_url)
+            self.page.get(new_url['url'])
+
+            contents = str(self.page.raw_data)
+
+            download_link = contents[contents.find('"data":"') + 8 : contents.find('",\\n\\t"sessionId"')]
+
+            self.page.get(download_link)
+
+            df = pd.read_excel(BytesIO(self.page.raw_data), header=0)
+
+            df = self.clean_and_transform_shop_cs_data(df)
+
+            df.to_excel(f"{self.base.source_path}/{self.task_name}&&{end_date}.xlsx", index=False)
             
-            print(f"{self.base_config['shop_name']}{self.task_name}: True")
+            print(f"{self.base.config_obj['shop_name']}{self.task_name}: True")
         
         return True
                          
@@ -139,13 +197,13 @@ class biz_shop_customer_service:
         
             for filename in filelist:
                 
-                print(f"{self.base_config['shop_name']}{self.task_name}: 开始执行 {filename} 的数据！")
+                print(f"{self.base.config_obj['shop_name']}{self.task_name}: 开始执行 {filename} 的数据！")
                 
                 excel_data_df = pd.read_excel(
                         f"{self.base.source_path}/" + filename)
                 
                 if len(excel_data_df) == 0:
-                    print(f"#{self.base_config['shop_name']}{self.task_name}: {filename} 是空数据！")
+                    print(f"#{self.base.config_obj['shop_name']}{self.task_name}: {filename} 是空数据！")
                     self.log(msg=f'{filename} 是空数据！')
                     shutil.move(
                         f"{self.base.source_path}/" + filename,
@@ -160,21 +218,21 @@ class biz_shop_customer_service:
                 res = self.insert_data_to_db(df=excel_data_df, table_name=self.table_name, add_col=self.add_col, key=self.primary_key)
                 
                 if res:
-                    print(f"#{self.base_config['shop_name']}{self.task_name}: {filename} 的数据执行成功！")
+                    print(f"#{self.base.config_obj['shop_name']}{self.task_name}: {filename} 的数据执行成功！")
                     # 将成功写入的文件移入 成功的文件夹
                     shutil.move(
                         f"{self.base.source_path}/" + filename,
                         f"{self.base.succeed_path}/" + filename,
                     )
                 else:
-                    print(f"#{self.base_config['shop_name']}{self.task_name}:  写入失败， {filename} 文件已剪切至 failure 文件夹！")
+                    print(f"#{self.base.config_obj['shop_name']}{self.task_name}:  写入失败， {filename} 文件已剪切至 failure 文件夹！")
                     self.log(msg=f'# 写入失败， {filename} 文件已剪切至 failure 文件夹！')
                     shutil.move(
                         f"{self.base.source_path}/" + filename,
                         f"{self.base.failure_path}/" + filename,
                     )
                 
-            print(f"#{self.base_config['shop_name']}{self.task_name}: 数据写入执行完毕！")
+            print(f"#{self.base.config_obj['shop_name']}{self.task_name}: 数据写入执行完毕！")
               
         except Exception as e:
             
@@ -183,7 +241,7 @@ class biz_shop_customer_service:
                 f"{self.base.failure_path}/" + filename,
             )
             
-            print(f"##{self.base_config['shop_name']}{self.task_name}:  写入报错， {filename} 文件已剪切至 failure 文件夹！")
+            print(f"##{self.base.config_obj['shop_name']}{self.task_name}:  写入报错， {filename} 文件已剪切至 failure 文件夹！")
             self.log(msg=f'# 写入报错， {filename} 文件已剪切至 failure 文件夹！')
             print(e)
 
