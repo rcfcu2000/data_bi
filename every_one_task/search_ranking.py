@@ -5,20 +5,21 @@ import random
 import re
 import pandas as pd
 from datetime import datetime, timedelta
-import base_action
+from .base_action import base_action
 
 
 class search_ranking:
-    def __init__(self):
-        self.base_action_instance = base_action.base_action()
+    def __init__(self, config):
+        self.base_action_instance = base_action()
         self.inst_ = self.base_action_instance
+        self.config = config
         self.start_date = ''
         self.end_date = ''
         pass
 
     # 读取配置文件
     def get_config(self):
-        res = self.inst_.get_config('sycmSearchRanking')
+        res = self.inst_.get_configs('sycmSearchRanking', config_name=self.config)
         self.start_date = res.get('start_date')
         self.end_date = res.get('end_date')
         return res
@@ -47,7 +48,7 @@ class search_ranking:
             print('# error: 创建存储文件出错，请检查。')
             return False
 
-        res = self.inst_.visit_sycm(task_name="【搜索排行】")
+        res = self.inst_.visit_sycm(task_name="【搜索排行】", config=self.config)
 
         if res is False:
             print('# 访问生意参谋失败，请检查。')
@@ -97,6 +98,7 @@ class search_ranking:
         for i in range(0, unit_count):
 
             while True:
+                
                 self.inst_.page.get(modified_url)
                 self.inst_.page.wait.load_start()
                 self.inst_.page.wait.doc_loaded()
@@ -284,8 +286,11 @@ class search_ranking:
 
         print(f"# data: {data_list}")
         print(f"# 数据量: {len(data_list)}")
-        self.inst_.pandas_insert_data(data_list, f'{self.inst_.source_path}/[生意参谋平台][搜索排行]&&{date_text}.xlsx')
-        mark = True
+        res = self.inst_.pandas_insert_data(data_list, f'{self.inst_.source_path}/[生意参谋平台][搜索排行]&&{date_text}.xlsx')
+        
+        if res['mark']:
+            print(f"[人群top10], {res['msg']}")
+            mark = True
 
         return mark
 
@@ -294,11 +299,6 @@ class search_ranking:
         self.inst_.engine_insert_data(task_name='[搜索排行]')
 
     def run(self):
-
-        # res = self.visit_search_ranking()
-        # if not res:
-        #     print('# 爬取数据失败！')
-        #     return
 
         res = self.get_config()
 
@@ -311,6 +311,13 @@ class search_ranking:
         if res is False:
             print('# error: 创建存储文件出错，请检查。')
             return False
+        
+        res = self.visit_search_ranking()
+        if not res:
+            print('# 爬取数据失败！')
+            return
+        
+        print('[搜索排行] 数据爬取成功！')
 
         self.insert_data()
 

@@ -6,28 +6,29 @@ import json
 import re
 import pandas as pd
 import calendar
-import base_action
+from .base_action import base_action
 from datetime import datetime, timedelta
 
 class commodity_everyday_data:
     
-    def __init__(self) -> None:
-        self.base = base_action.base_action()
+    def __init__(self, config) -> None:
+        self.base = base_action()
         self.task_name = "【商品每日数据】"
-        self.config_name = 'sycmCommodityEverydayData'
+        self.config_name = 'sycmCommodityEverydayData' 
+        self.config = config
         pass
     
     def get_config(self):
         
         mark = False
         
-        res = self.base.get_configs(self.config_name)
+        res = self.base.get_configs(self.config_name, config_name=self.config)
 
         if res:
             # print(self.inst_.config_obj)
             mark = True
         else:
-            print('# 获取配置信息失败!')
+            print(f'{self.base.config_obj["shop_name"]}: <error> 获取配置信息失败!')
         
         return mark
     
@@ -43,26 +44,26 @@ class commodity_everyday_data:
         res = self.get_config()
 
         if res is False:
-            print('# error: 读取配置文件出错，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> 读取配置文件出错，请检查。')
             return False
 
         res = self.create_folder()
 
         if res is False:
-            print('# error: 创建存储文件出错，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> 创建存储文件出错，请检查。')
             return False
 
-        res = self.base.visit_sycm(task_name=self.task_name)
+        res = self.base.visit_sycm(task_name=self.task_name, config=self.config)
 
         if res is False:
-            print('# 访问生意参谋失败，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> 访问生意参谋失败，请检查。')
             return False
 
         # 登录
         res = self.base.login_sycm(task_name=self.task_name)
         
         if res is False:
-            print('# 登录失败，请检查！')
+            print(f'{self.base.config_obj["shop_name"]}: <error> 登录失败，请检查！')
             return False
 
         return True
@@ -78,6 +79,7 @@ class commodity_everyday_data:
         res = self.base.down_load_excel_data(automatic_date=automatic_date, task_name=self.task_name)
         
         if res is False:
+            print(f'{self.base.config_obj["shop_name"]}: <error> 下载excel失败，请检查！')
             return False
 
         return True
@@ -87,6 +89,7 @@ class commodity_everyday_data:
         res = self.base.insert_data_in_db(task_name=self.task_name)
         
         if res is False:
+            print(f'{self.base.config_obj["shop_name"]}: <error> 数据写入失败，请检查！')
             return False
         
         return True
@@ -104,20 +107,38 @@ class commodity_everyday_data:
         res = self.visit_sycm()
         
         if res is False:
-            self.send_email()
             return
+        
+        print(f' ######### <{self.base.config_obj["shop_name"]}> <商品每日数据> <logging-start> ######## ')
+        
+        print(f'{self.base.config_obj["shop_name"]}: <info> 开始执行 商品每日数据 ！')
         
         res = self.down_load_excel()
         
         if res is False:
-            self.send_email()
             return
         
         res = self.db_insert_data()
         
         if res is False:
-            self.send_email()
             return
+        
+        # 更新和增加biz_product
+        res = self.base.update_biz_product()
+        
+        if res is False:
+            return
+        
+        print(f'{self.base.config_obj["shop_name"]}: <info> 成功更新 biz_product 的商品状态!')
+        
+        print(f'{self.base.config_obj["shop_name"]}: <info> 成功写入 biz_product 的数据!')
+        
+        print(f'{self.base.config_obj["shop_name"]}: <info> 执行完毕 商品每日数据 ！')
+        
+        print(f' ######### <{self.base.config_obj["shop_name"]}> <商品每日数据> <logging-end> ######## ')
+    
+    def test(self):
+        self.visit_sycm()
     
 if __name__ == "__main__":
     test = commodity_everyday_data()

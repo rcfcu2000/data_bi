@@ -6,14 +6,15 @@ import json
 import re
 import pandas as pd
 import calendar
-import every_one_task.base_action as base_action
+from .base_action import base_action
 from datetime import datetime, timedelta
 
 
-class crowd_top10:
-    def __init__(self):
-        self.base_action_instance = base_action.base_action()
+class crowd_top20:
+    def __init__(self, config):
+        self.base_action_instance = base_action()
         self.inst_ = self.base_action_instance
+        self.config = config
         self.start_month = ''
         # crowd_type
         self.crowd_type = {
@@ -33,13 +34,13 @@ class crowd_top10:
 
         mark = False
 
-        res = self.inst_.get_configs('sycmCrowdTop10')
+        res = self.inst_.get_configs('sycmCrowdTop20', config_name=self.config)
 
         if res:
             # print(self.inst_.config_obj)
             mark = True
         else:
-            print('# 获取配置信息失败!')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 获取配置信息失败!')
 
         return mark
 
@@ -56,31 +57,31 @@ class crowd_top10:
         res = self.get_config()
 
         if res is False:
-            print('# error: 读取配置文件出错，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 读取配置文件出错，请检查。')
             return False
 
         res = self.create_folder()
 
         if res is False:
-            print('# error: 创建存储文件出错，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 创建存储文件出错，请检查。')
             return False
 
-        res = self.inst_.visit_sycm(task_name="[人群top10]")
+        res = self.inst_.visit_sycm(task_name="[人群top20]", config=self.config)
 
         if res is False:
-            print('# 访问生意参谋失败，请检查。')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 访问生意参谋失败，请检查。')
             return False
 
         # 登录
-        res = self.inst_.sycm_login(task_name='[人群top10]')
+        res = self.inst_.sycm_login(task_name='[人群top20]')
         if res is False:
-            print('# 登录失败，请检查！')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 登录失败，请检查！')
             return False
 
         return True
 
     # 访问人群top10, 拿到Json 数据
-    def get_top10_data(self):
+    def get_top20_data(self):
 
         mark = False
         # 存储每一个 crowd type 的数据
@@ -89,7 +90,7 @@ class crowd_top10:
         res = self.visit_sycm()
 
         if res is False:
-            print('# crowd_top10: 生意参谋访问失败~ ')
+            print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 生意参谋访问失败~ ')
             return mark
 
         """
@@ -125,6 +126,11 @@ class crowd_top10:
             last_day_str = str(last_day)
 
         year_str = str(last_year)
+        
+        if False:
+            year_str = '2024'
+            month_str = '03'
+            last_day_str = '31'
 
         url = self.inst_.config_obj['second_level_url']
         crowd_id_url = self.inst_.config_obj['crowd_id_url']
@@ -150,89 +156,175 @@ class crowd_top10:
             data = json.loads(data_str)
 
             if data['code'] == 0 and data['message'] == '操作成功':
-
+                
+                crowdId_str = 'townmold'
+                
                 for i in range(0, len(data['data'])):
+                    
+                    # print(f'开始访问 {self.crowd_type[data["data"][i]["crowdId"]["value"]]} 类别的数据！')
+                    
                     # 拿到每一个 corwdID
-                    modified_url = re.sub('crowdId=else', f'crowdId={data["data"][i]["crowdId"]["value"]}',
+                    modified_url = re.sub(f'crowdId={crowdId_str}', f'crowdId={data["data"][i]["crowdId"]["value"]}',
                                           modified_url)
 
-                    # 开始访问 拿到每个crowdID top10 的数据
+                    print(modified_url)
+                    
+                    # 开始访问 拿到每个crowdID top20 的数据
                     self.inst_.page.get(modified_url)
 
                     if self.inst_.page.raw_data:
 
-                        top10_data = json.loads(self.inst_.page.raw_data)
+                        top20_data = json.loads(self.inst_.page.raw_data)
 
-                        if top10_data['code'] != 0 or top10_data['message'] != '操作成功':
-                            print(f'# error: top10 数据获取失败, 服务器返回失败。')
+                        if top20_data['code'] != 0 or top20_data['message'] != '操作成功':
+                            print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 数据获取失败, 服务器返回失败。')
                             return mark
 
-                        top10_data_ = top10_data['data']['data']
+                        top20_data_ = top20_data['data']['data']
 
-                        for j in range(0, len(top10_data_)):
+                        for j in range(0, len(top20_data_)):
+                            
+                            childrenLen = len(top20_data_[j].get('children', []))
+                            
+                            if childrenLen > 0:
+                                
+                                childrenArr = top20_data_[j]['children']
+                            
+                                for item in childrenArr:
+                                    
+                                    obj = {'shop_id': self.inst_.config_obj['shop_id'],
+                                            'shop_name': self.inst_.config_obj['shop_name'],
+                                            'year_month': f'{year_str}-{month_str}',
+                                            'crowd_type': self.crowd_type[item['crowdId']['value']],
+                                            'secondary_source': top20_data_[j]['pageName'],
+                                            'tertiary_source': item['pageName']
+                                        }
 
-                            obj = {'shop_id': self.inst_.config_obj['shop_id'],
-                                   'shop_name': self.inst_.config_obj['shop_name'],
-                                   'year_month': f'{year_str}-{month_str}',
-                                   'crowd_type': self.crowd_type[data['data'][i]['crowdId']['value']],
-                                   'product_id': top10_data_[j]['itemId']['value'],
-                                   'product_name': top10_data_[j]['item']['title'],
-                                   'visitors': top10_data_[j]['uv']['value'],
-                                   'paid_buyers': top10_data_[j]['payByrCnt']['value']
-                                   }
+                                    obj['visitors'] = item.get('uv', '')
+                                    if obj['visitors'] != '':
+                                        obj['visitors'] = item['uv']['value']
+                                    
+                                    obj['paid_buyers'] = item.get('payByrCnt', '')
+                                    if obj['paid_buyers'] != '':
+                                        obj['paid_buyers'] = item['payByrCnt']['value']
+                                    
+                                    try:
+                                        paid_amount = str(item['payAmt']['value'])
+                                        if self.inst_.is_number(paid_amount) is not None:
+                                            paid_amount = round(item['payAmt']['value'], 2)
+                                    except:
+                                        paid_amount = ''
+                                    
+                                    obj['paid_amount'] = paid_amount
+                                        
+                                    try:
+                                        payRate = str(item['payRate']['value'])
+                                        if self.inst_.is_number(payRate) is not None:
+                                            payRate = round(item['payRate']['value'] * 100, 2)
+                                    except:
+                                        payRate = ''
+                                        
+                                    obj['conversion_rate'] = payRate
 
-                            paid_amount = str(top10_data_[j]['payAmt']['value'])
-                            if self.inst_.is_number(paid_amount) is not None:
-                                paid_amount = round(top10_data_[j]['payAmt']['value'], 2)
+                                    try:
+                                        tgi = str(item['visitPreferenceTGI']['value'])
+                                        if self.inst_.is_number(tgi) is not None:
+                                            tgi = round(item['visitPreferenceTGI']['value'])
+                                    except:
+                                        tgi = ''
+                                        
+                                    obj['tgi'] = tgi
 
-                            obj['paid_amount'] = paid_amount
+                                    # print(f'# 每行数据预览: {obj}')
+                                    obj_arr.append(obj)
+                            
+                            else:
+                                
+                                obj = {'shop_id': self.inst_.config_obj['shop_id'],
+                                        'shop_name': self.inst_.config_obj['shop_name'],
+                                        'year_month': f'{year_str}-{month_str}',
+                                        'crowd_type': self.crowd_type[top20_data_[j]['crowdId']['value']],
+                                        'secondary_source': top20_data_[j]['pageName'],
+                                        'tertiary_source': top20_data_[j]['pageName']  
+                                }
+                                
+                                obj['visitors'] = top20_data_[j].get('uv', '')
+                                if obj['visitors'] != '':
+                                    obj['visitors'] = top20_data_[j]['uv']['value']
+                                    
+                                obj['paid_buyers'] = top20_data_[j].get('payByrCnt', '')
+                                if obj['paid_buyers'] != '':
+                                    obj['paid_buyers'] = top20_data_[j]['payByrCnt']['value']
+                                
+                                try:
+                                    paid_amount = str(top20_data_[j]['payAmt']['value'])
+                                    if self.inst_.is_number(paid_amount) is not None:
+                                        paid_amount = round(top20_data_[j]['payAmt']['value'], 2)
+                                except:
+                                    paid_amount = ''
+                                    
+                                obj['paid_amount'] = paid_amount
 
-                            payRate = str(top10_data_[j]['payRate']['value'])
-                            if self.inst_.is_number(payRate) is not None:
-                                payRate = round(top10_data_[j]['payRate']['value'] * 100, 2)
+                                try:
+                                    payRate = str(top20_data_[j]['payRate']['value'])
+                                    if self.inst_.is_number(payRate) is not None:
+                                        payRate = round(top20_data_[j]['payRate']['value'] * 100, 2)
+                                except:
+                                    payRate = ''
+                                    
+                                obj['conversion_rate'] = payRate
 
-                            obj['conversion_rate'] = payRate
+                                try:
+                                    tgi = str(top20_data_[j]['visitPreferenceTGI']['value'])
+                                    if self.inst_.is_number(tgi) is not None:
+                                        tgi = round(top20_data_[j]['payPreferenceTGI']['value'])
+                                except:
+                                    tgi = ''
+                                    
+                                obj['tgi'] = tgi
 
-                            tgi = str(top10_data_[j]['payPreferenceTGI']['value'])
-                            if self.inst_.is_number(tgi) is not None:
-                                tgi = round(top10_data_[j]['payPreferenceTGI']['value'])
-
-                            obj['tgi'] = tgi
-
-                            # print(f'# 每行数据预览: {obj}')
-                            obj_arr.append(obj)
-
-                        num = random.randint(0, 5)
+                                # print(f'# 每行数据预览: {obj}')
+                                obj_arr.append(obj)
+                                
+                        crowdId_str = data["data"][i]["crowdId"]["value"]
+                        num = random.uniform(0.1, 0.9)
                         self.inst_.page.wait(num)
-                        print(f'# 随机等待{num}秒, 再进行下一个类别的访问!')
+                        # print(f'# 随机等待{num}秒, 再进行下一个类别的访问!')
 
                     else:
 
-                        print(f'# error: 访问top10数据失败！')
+                        print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 访问top20数据失败！')
                         return mark
 
-                print(f'# 数据总预览: {obj_arr}')
+                # print(f'# 数据总预览: {obj_arr}')
 
                 # 将拿到的数据写入到本地存储
                 self.inst_.pandas_insert_data(obj_arr,
-                                              f'{self.inst_.source_path}/[生意参谋平台][人群top10]&&'
+                                              f'{self.inst_.source_path}/[生意参谋平台][人群top20]&&'
                                               f'{year_str}-{month_str}.xlsx')
 
                 # 写入DB
-                res = self.inst_.engine_insert_data(task_name='[人群top10]')
+                res = self.inst_.engine_insert_data(task_name='[人群top20]')
 
                 if res is False:
-                    print(f'# 数据写入失败!')
+                    print(f'{self.base.config_obj["shop_name"]}: <error> [人群top20] 数据写入失败!')
                 else:
                     mark = True
 
         return mark
 
     def run(self):
-        self.get_config()
-        self.get_top10_data()
+        print(f'{self.base.config_obj["shop_name"]}: <info> 开始执行 人群top20!')
+        res = self.get_config()
+        if res is False:
+            return
+        res = self.get_top20_data()
+        if res is False:
+            return
+        
+        print(f'{self.base.config_obj["shop_name"]}: <info> 执行完毕 人群top20!')
 
 
 if __name__ == '__main__':
-    test = crowd_top10()
+    test = crowd_top20()
     test.run()
