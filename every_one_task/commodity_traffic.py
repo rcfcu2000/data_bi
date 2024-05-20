@@ -3,11 +3,15 @@
 """
 import random
 import json
+import os
 import re
 import pandas as pd
 import calendar
 from .base_action import base_action
 from datetime import datetime, timedelta
+from sqlalchemy import create_engine, text, Table, Column, String, Date, Float, MetaData, DECIMAL
+from sqlalchemy.dialects.mysql import DOUBLE
+
 
 class commodity_traffic:
     
@@ -91,21 +95,122 @@ class commodity_traffic:
     
     def db_insert_data(self):
         
-        res = self.base.insert_data_in_db(task_name=self.task_name)
+        self.excel_data_df_count = 0
+        data_count = 0
+        transfersql = ''
+        source_text = ''
+        filename = ''
         
-        if res is False:
-            print(f'{self.base.config_obj["shop_name"]}: <error> 数据写入失败，请检查！')
-            return False
-        
-        return True
-    
-    def write_log(self):
-        
-        self.base.log_(self.base.log_arr)
-    
-    def send_email(self):
-        
-       self.base.send_emails()
+        try:
+            engine = self.base.create_engine()
+            
+            if self.base.create_engine_bool is False:
+                return
+            
+            conn = engine.connect()
+            
+            filelist = [
+                    f
+                    for f in os.listdir(f"{self.base.source_path}")
+                    if f"【生意参谋平台】" in f
+                ]
+
+            index = 0
+            list_end = False
+            
+            while not list_end:
+                
+                try:
+                
+                    for i in range(0, 100):
+                        
+                        filename = filelist[index]
+
+                        match = re.search(r'\[(.*?)\]', filename)
+                        source_text = match.group(1)
+
+                        excel_data_df = pd.read_excel(
+                            f"{self.base.source_path}/" + filename)
+                        
+                    
+                        # 使用正则表达式提取数字
+                        match = re.search(r"\b\d+\b", filename)
+                        id_ = match.group()
+                        dstring = filename.split("&&")[1]
+
+                        df_cleaned = self.base.clean_and_transform_product_flowes_data(
+                            excel_data_df
+                        )
+
+                        df_cleaned["product_id"] = id_
+                        df_cleaned["shop_name"] = self.base.config_obj["shop_name"]
+                        df_cleaned["src"] = source_text
+
+                        if i == 0:
+                            df_final = df_cleaned
+                        else:
+                            df_final = df_final._append(df_cleaned)
+
+                        index += 1
+                        if index >= len(filelist):
+                            list_end = True
+                            break
+
+                    temptable = "temp"
+                    table = "biz_product_traffic_stats"
+                    key = [
+                        "product_id",
+                        "statistic_date",
+                        "source_type_1",
+                        "source_type_2",
+                        "source_type_3",
+                        'src'
+                    ]
+
+                    df_final.to_sql(
+                        name=temptable, con=engine, index=False, if_exists="replace"
+                    )
+                    transfersql = f"""insert into {table} ({",".join(df_cleaned.columns)}) 
+                                        select * from {temptable} t 
+                                    """
+                                        # where not exists 
+                                        # (select 1 from {table} m 
+                                        # where {"and".join([f" t.{col} = m.{col} " for col in key])}
+                                        # )"""
+                    # print(transfersql)
+                    
+                    conn.execute(text(transfersql))
+
+                    conn.execute(text(f"drop table {temptable}"))
+                
+                except Exception as e:
+                    
+                    print(f"{self.base.config_obj['shop_name']}: 发生错误的文件 - {filename} - 数据写入出错！\n {str(e)}")
+                
+        except Exception as e:
+            
+            print(f"{self.base.config_obj['shop_name']}: {self.task_name} - 数据写入出错！\n {str(e)}")
+            
+
+    def log(self, msg, type_='error'):
+        # 配置日志输出的格式
+        logging.basicConfig(
+            filename=f"{self.base.logger_path}/[{type_}]_[{datetime.now().strftime('%Y-%m-%d')}].log",
+            format='%(asctime)s - %(levelname)s - %(message)s', 
+            datefmt='%Y-%m-%d %H:%M:%S',
+            level=logging.INFO  # 设置日志级别为 INFO
+        )
+        # 记录日志信息
+        if type_ == 'debug':
+            logging.debug(msg)
+        elif type_ == 'info':
+            logging.info(msg)
+        elif type_ == 'warning':
+            logging.warning(msg)
+        elif type_ == 'error':
+            logging.error(msg)
+        else:
+            logging.critical(msg)
        
     def run(self):
         
@@ -126,31 +231,31 @@ class commodity_traffic:
         if res is False:
             return
         
-        if self.base.config_obj['automatic_date'] == '自动计算前一天':
-            datetime_ = self.base.get_before_day_datetime()
-            start_date = datetime_
-            end_date = datetime_
-        else:
-            start_date = self.base.config_obj["start_date"]
-            end_date = self.base.config_obj["end_date"]
+        # if self.base.config_obj['automatic_date'] == '自动计算前一天':
+        #     datetime_ = self.base.get_before_day_datetime()
+        #     start_date = datetime_
+        #     end_date = datetime_
+        # else:
+        #     start_date = self.base.config_obj["start_date"]
+        #     end_date = self.base.config_obj["end_date"]
         
-        res = self.base.calc(start_date_=start_date, end_date_=end_date)
+        # res = self.base.calc(start_date_=start_date, end_date_=end_date)
         
-        if res is False:
-            return
+        # if res is False:
+        #     return
         
-        res = self.base.calc_prepallet()
+        # res = self.base.calc_prepallet()
         
-        if res is False:
-            return
+        # if res is False:
+        #     return
         
-        # 1. 删除 biz_pallet_product 指定日期的信息
-        # 2. 从视图 v_pallet_product 写入相关数据
+        # # 1. 删除 biz_pallet_product 指定日期的信息
+        # # 2. 从视图 v_pallet_product 写入相关数据
         
-        res = self.base.insert_biz_pallet_product_from_v_pallet_product()
+        # res = self.base.insert_biz_pallet_product_from_v_pallet_product()
         
-        if res is False:
-            return
+        # if res is False:
+        #     return
         
         print(f'{self.base.config_obj["shop_name"]}: <info> 执行完毕 商品流量数据')
         

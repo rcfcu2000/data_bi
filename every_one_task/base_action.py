@@ -201,6 +201,12 @@ class base_action:
             for key in documents:
                 self.config_obj[key] = documents[key]
         
+            base_config = self.get_configs_return_obj('base_config', config_name=config_name)
+            
+            for key in base_config:
+                if key not in self.config_obj.keys():
+                    self.config_obj[key] = base_config[key]
+
             mark = True
             
         except Exception as e:
@@ -297,7 +303,7 @@ class base_action:
 
         # 改变模式 切换为 S 模式：requests
         try:
-            self.page.change_mode(mode)
+            self.page.change_mode(mode, go=False)
 
             # 将开始日期和结束日期替换成 start_date
             url = self.config_obj["excel_url"]
@@ -409,7 +415,7 @@ class base_action:
                         )
 
                     # 休眠一定时间
-                    time.sleep(random.randint(0, 6))
+                    time.sleep(random.randint(0, 2))
                     count += 1
 
                 except Exception as e:
@@ -1002,9 +1008,7 @@ class base_action:
     def clean_and_transform_shop_data(self, df, tag):
 
         try:
-            self.log_arr.append(
-                f"info/shs/【{self.get_date_time()}】: 开始清洗数据 ..."
-            )
+
             mapping = {
                 df.columns[0]: "primary_source",
                 df.columns[1]: "secondary_source",
@@ -1062,7 +1066,6 @@ class base_action:
             }
 
             if tag == '每一次访问来源':
-                print(tag)
                 mapping[df.columns[39]] = 'ad_transaction_amount'
                 mapping[df.columns[40]] = 'ad_transaction_amount_change'
                 mapping[df.columns[41]] = 'ad_clicks_count'
@@ -2186,37 +2189,35 @@ class base_action:
 
                     df_cleaned = self.clean_and_transform_product_data(
                         excel_data_df)
-                    
-                    # df_cleaned.to_excel(
-                    #     f'./output.xlsx',
-                    #     index=False, engine='xlsxwriter')
                                         
                     table = "biz_product_performance"
                     key = ["product_id", "statistic_date"]
                     df_cleaned["shop_name"] = self.config_obj["shop_name"]
-                    df_cleaned["shop_id"] = "999"
+                    df_cleaned["shop_id"] = self.config_obj['shop_id']
                     if self.clean_and_transform_product_data_bool is False:
                         return
 
                     df_cleaned.to_sql(
                         name=temptable, con=engine, index=False, if_exists="replace"
                     )
+                    
                     transfersql = f"""insert into {table} ({",".join(df_cleaned.columns)}) 
                                         select * from {temptable} t 
                                         where not exists 
                                         (select 1 from {table} m 
                                         where {"and".join([f" t.{col} = m.{col} " for col in key])}
                                         )"""
-                    # print(transfersql)
-
-                # print(transfersql)
+                                        
                 conn.execute(text(transfersql))
-
-                # print(f"sql 已执行！")
 
                 conn.execute(text(f"drop table {temptable}"))
                 
-                # print(f"已删除 temp 表！")
+                if task_name == '【商品每日数据】':
+                    
+                    res = self.update_biz_product(date_=df_cleaned.iloc[1, df_cleaned.columns.get_loc('statistic_date')])
+                    
+                    if res:
+                        print(f"{df_cleaned.iloc[1, df_cleaned.columns.get_loc('statistic_date')]}, biz_product 执行成功！")
 
                 # 将成功写入的文件移入 成功的文件夹
                 shutil.move(
@@ -2243,8 +2244,6 @@ class base_action:
                 
                 # print("数据写入失败!")
                 self.log_([f"error/shs/【{self.get_date_time()}】: 数据写入失败!", f'<error>: {str(e)}'])
-
-                continue
             
             # self.email_msg += f"数据总条数: {data_count} 条\n"
             # self.email_msg += f"写入成功的条数: {self.excel_data_df_count} 条\n"
@@ -2549,6 +2548,7 @@ class base_action:
                         # 如果这个组合已经处理过，则跳过
                         if pair in processed_pairs:
                             continue
+                        
                         # 否则，添加到集合中以跟踪
                         processed_pairs.add(pair)
 
@@ -2882,13 +2882,10 @@ class base_action:
 
     # 店铺流量来源
     def sycm_shop_flow_source(self, config_):
-
-        browserPort = 'browserPort'
-        self.get_configs(browserPort, config_name=config_)
-        port = self.config_obj['port']
         
         config_str = "sycmShopTrafficSource"
         self.get_config_bool = self.get_configs(config_str, config_name=config_)
+        port = self.config_obj['port']
         
         if self.get_config_bool is False:
             print("<error>：配置项读取失败~")
@@ -2958,18 +2955,6 @@ class base_action:
 
         # # 写入数据库
         self.engine_insert_data(task_name="【店铺流量来源】")
-        # # 写入日志
-        # self.log_(self.log_arr, task_name="【店铺流量来源】")
-
-        # print("程序执行成功， 执行结果请查看 log！")
-
-        # self.email_msg += "任务执行完毕：执行详细过程请查看log日志\n"
-        # self.email_msg += "******************************\n"
-        # print("开始发送邮件~！")
-        # self.email_msg_arr.clear()
-        # self.email_msg_arr.append(self.email_msg)
-        # self.send_email("【生意参谋平台】/ 店铺流量来源", self.email_msg_arr)
-        # print("邮件发送成功~！")
 
         pass
 
@@ -3242,7 +3227,7 @@ class base_action:
                         csv_data = pd.read_csv(
                             f"{excel_url}\\{file}", encoding="gbk")
 
-                    print(csv_data)
+                    # print(csv_data)
 
                 except Exception as e:
 
@@ -3254,7 +3239,7 @@ class base_action:
                         csv_data = pd.read_csv(
                             f"{excel_url}\\{file}", encoding="utf-8")
                     
-                    print(csv_data)
+                    # print(csv_data)
 
                 pass
 
@@ -3383,7 +3368,7 @@ class base_action:
                             bpp.product_id, 
                             bpp.product_status
                         FROM biz_product_performance bpp
-                        WHERE bpp.statistic_date = {str_}
+                        WHERE bpp.statistic_date = '{str_}'
                     ) as latest_status ON bp.product_id = latest_status.product_id
                     SET bp.product_status = latest_status.product_status;
                     """)
@@ -3399,7 +3384,7 @@ class base_action:
                         shop_name,
                         shop_id
                     FROM biz_product_performance bpp
-                    WHERE bpp.statistic_date = {str_}
+                    WHERE bpp.statistic_date = '{str_}'
                     AND NOT EXISTS (
                         SELECT 1 FROM biz_product WHERE product_id = bpp.product_id
                     );
@@ -3426,7 +3411,7 @@ class base_action:
             
         except Exception as e:
             
-            self.log_([f"error/shs/【{self.get_date_time()}】: biz_pallet_product 执行出错!", f'{str(e)}'])
+            self.log_([f"error/shs/【{self.get_date_time()}】: biz_product 执行出错!", f'{str(e)}'])
         
         return mark
     

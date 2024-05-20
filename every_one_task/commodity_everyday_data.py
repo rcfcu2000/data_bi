@@ -123,12 +123,6 @@ class commodity_everyday_data:
         if res is False:
             return
         
-        # 更新和增加biz_product
-        res = self.base.update_biz_product()
-        
-        if res is False:
-            return
-        
         print(f'{self.base.config_obj["shop_name"]}: <info> 成功更新 biz_product 的商品状态!')
         
         print(f'{self.base.config_obj["shop_name"]}: <info> 成功写入 biz_product 的数据!')

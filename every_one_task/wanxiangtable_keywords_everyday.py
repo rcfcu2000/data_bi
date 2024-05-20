@@ -20,7 +20,7 @@ class wanxiangtable_keywords_everyday:
         self.base = base_action()
         self.port = self.base.get_port()
         self.page = None
-        self.task_name = "[万相台][关键词]"
+        self.task_name = "[万相台][关键词报表]"
         self.get_config_bool = self.base.get_configs('wanxiang_keywords_day', config_name=config)
         self.create_folder_bool = self.base.create_folder(
             "D:", self.base.config_obj['excel_storage_path'])
@@ -29,24 +29,13 @@ class wanxiangtable_keywords_everyday:
         self.down_load_date = ''
         # 数据库表名
         self.table_name = 'wanxiang_keywords'
-        self.add_col = {
-            # 'shop_id': self.base.config_obj['shop_id'],
-            # 'shop_name': self.base.config_obj['shop_name'],
-            # 'src_type': '手淘搜索'
-        }
+        self.add_col = {}
+        self.check_url = self.base.config_obj['check_url']
 
     # 判断数据是否是以 b 开头
     def is_bytes_string(self, data):
         # 判断数据是否以字节字符串的形式表示
         return isinstance(data, bytes)
-
-    def write_log(self):
-
-        self.base.log_(self.base.log_arr)
-
-    def send_email(self):
-
-        self.base.send_emails()
 
     def visit_alimama(self):
 
@@ -59,15 +48,14 @@ class wanxiangtable_keywords_everyday:
 
         page = WebPage(chromium_options=co)
         
-        res = self.base.whether_the_url_exists_in_the_browser(page=page, url_str='sycm.taobao.com')
+        res = page.get_tab(url=self.check_url)
         
-        if res['mark']:
+        if res is not None:
             # 已访问
+            self.page = res
+        else:
             pageTab = page.new_tab(self.base.config_obj['url'])
             self.page = pageTab
-        else:
-            page.get(self.base.config_obj['url'])
-            self.page = page
         
         
         # print(f'2. browser_id: {page._browser_id} && tab_id: {page.tab_id} && browser_url: {page._browser_url}')
@@ -201,17 +189,17 @@ class wanxiangtable_keywords_everyday:
             while True:
                 url = f"https://one.alimama.com/report/query.json"
                 self.page.post(url=url, data=data_, show_errmsg=True)
-                print(f"{self.base.config_obj['shop_name']}: <info> 开始下载{date_item}的关键词报表, 第{int(data_['offset']/100)+1}页") 
+                print(f"{self.base.config_obj['shop_name']}: <info> {self.task_name} 开始下载{date_item}的关键词报表, 第{int(data_['offset']/100)+1}页") 
                 data = json.loads(self.page.raw_data)
                 # print(data['data']['list'])
                 if data['data'] is None:
-                    print(f'{self.base.config_obj["shop_name"]}: <error> 发生错误， {data["info"]["errorCode"]}, {data["info"]["message"]}')
-                    print(f'{self.base.config_obj["shop_name"]}: <info> 随机3秒后准备重试...')
+                    print(f'{self.base.config_obj["shop_name"]}: <error>  {self.task_name} 发生错误， {data["info"]["errorCode"]}, {data["info"]["message"]}')
+                    print(f'{self.base.config_obj["shop_name"]}: <info>  {self.task_name} 随机3秒后准备重试...')
                     self.page.wait(random.randint(1, 3))
                     continue
                     
                 if len(data['data']['list']) == 0:
-                    print(f"{self.base.config_obj['shop_name']}: <info> 下载{date_item}的关键词报表完毕！")
+                    print(f"{self.base.config_obj['shop_name']}: <info> {self.task_name} 下载{date_item}的关键词报表完毕！")
                     break
 
                 for item in data['data']['list']:
@@ -280,7 +268,7 @@ class wanxiangtable_keywords_everyday:
             
             if len(data_arr) > 0:    
                 res = self.base.pandas_insert_data(
-                    data_arr, f"{self.base.source_path}/[万相台][关键词报表]&&{self.down_load_date}&&{self.down_load_date}.xlsx")
+                    data_arr, f"{self.base.source_path}/{self.task_name}&&{self.down_load_date}&&{self.down_load_date}.xlsx")
   
     def get_excel_data_insert_db(self):
         
@@ -291,7 +279,7 @@ class wanxiangtable_keywords_everyday:
                     file
                     for file in os.listdir(excel_url)
                     if os.path.isfile(os.path.join(excel_url, file))
-                    and "[关键词报表]" in file
+                    and f"{self.task_name}" in file
                     and file.endswith("xlsx")
                     ]
         
@@ -318,11 +306,13 @@ class wanxiangtable_keywords_everyday:
                     f"{self.base.source_path}/" + file,
                     f"{self.base.succeed_path}/" + file,
                 )
+                print(f'{self.base.config_obj["shop_name"]}: <error> {self.task_name} - {file} - 成功写入数据库！')
             else:
                 shutil.move(
                     f"{self.base.source_path}/" + file,
                     f"{self.base.failure_path}/" + file,
                 )
+                print(f'{self.base.config_obj["shop_name"]}: <error> {self.task_name} - {file} - 写入数据库失败！')
             
     # 关键词报表
     def clean_and_transform_wanxiang_keywords_data(self, df):
@@ -395,7 +385,7 @@ class wanxiangtable_keywords_everyday:
                 'msg': '数据清洗成功！'
             }
         except Exception as e:
-            print(f"{self.base.config_obj['shop_name']}: <error> 数据清洗失败:", cn, df[cn], e)
+            print(f"{self.base.config_obj['shop_name']}: <error> {self.task_name} 数据清洗失败:", cn, df[cn], e)
             # self.log_([f"error/shs/【{self.get_date_time()}】: 关键词报表 清洗失败", f'{str(e)}'])
             return {
                 'mark': False,

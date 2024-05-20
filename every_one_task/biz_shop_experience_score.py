@@ -28,14 +28,12 @@ class biz_shop_experience_score:
         # 获取配置文件中该任务的配置
         self.get_config_bool = self.base.get_configs(self.__class__.__name__, config_name=self.config)
         
-        # 获取配置文件中公用配置的对象
-        self.base_config = self.base.get_configs_return_obj('base_config', config_name=self.config)
         self.create_folder_bool = self.base.create_folder("D:", self.base.config_obj['excel_storage_path'])
         
         # 检查并拿到 pageTab [根据需要修改的参数]
-        self.check_url = 'myseller.taobao.com'
+        self.check_url = self.base.config_obj['check_url']
         
-        self.shop_name = self.base_config['shop_name']
+        self.shop_name = self.base.base_config['shop_name']
         self.table_name = self.__class__.__name__
         
         # [根据需要修改的参数]
@@ -43,6 +41,9 @@ class biz_shop_experience_score:
         # [根据需要修改的参数]
         self.add_col = {}
         self.page = None
+        
+        # data
+        self.json_data = None
     
     def visit_sycm(self):
         
@@ -82,20 +83,31 @@ class biz_shop_experience_score:
             
             self.page.listen.start(self.base.config_obj['monitor_url'])  # 开始监听，指定获取包含该文本的数据包
             
-            # for packet in self.page.listen.steps():
-            #     print(packet.url)
-                
+            count = 1
+              
             while True:  
                 res = self.page.listen.wait()  
                 data = res.response.body
                 json_data = data[data.index('(')+1:-1]
                 json_object = json.loads(json_data)
                 if json_object['api'] == 'mtop.alibaba.tmall.item.diagnosis' and json_object['data']['componentId'] == 'tmallDiagnosisIndustryComparison':
-                    print(json_object)
-            
+                    self.json_data = json_object
+                    print(f'# {self.shop_name}{self.task_name} <info> 已经监听到需要的数据！')
+                    print(self.json_data)
+                    return {
+                        'mark': True,
+                        'msg': f'# {self.shop_name}{self.task_name} <info> 已经监听到需要的数据！'
+                    }
+                
+                count += 1
+                
+                if count > 10:
+                    print(f'# {self.shop_name}{self.task_name} <error> 未监听到需要的数据！')
+                    break 
+
             return {
-                'mark': True,
-                'msg': f'# {self.shop_name}{self.task_name} <info> 访问成功！'
+                'mark': False,
+                'msg': f'# {self.shop_name}{self.task_name} <error> 未监听到需要的数据！'
             }
         
         except Exception as e:
@@ -108,54 +120,11 @@ class biz_shop_experience_score:
                 'msg': f'# {self.shop_name}{self.task_name} <info> 访问失败！'
             }
     
-    def get_json_data(self):
-        
-        date_format = "%Y-%m-%d"
-        
-        date_range = []
-        
-        self.page.change_mode('s')
-        
-        if self.base.config_obj['automatic_date'] == '自动计算前一天' or self.base_config['automatic_date'] == '自动计算前一天':
-            before_day = self.base.get_before_day_datetime()
-            date_range = pd.date_range(before_day, before_day)
-        else:
-            date_range = pd.date_range(self.base.config_obj.get('start_date', self.base_config['start_date']), self.base.config_obj.get('end_date', self.base_config['end_date']))
-        
-        # 重试
-        url = self.base.config_obj['second_level_url']
-        
-        for date in date_range:
+    def json_data_to_excel(self):
             
-            data_arr = []
-            
-            date_ = date.strftime(date_format)
-            
-            new_url = self.base.new_url(dict_={'dateRange': f'{date_}|{date_}'}, oldurl=url)
-            
-            print(f"{self.base_config['shop_name']}{self.task_name}: 开始获取 {date_} 的数据, 链接：{new_url}")
-            
-            self.page.get(new_url)
-            
-            data_ = json.loads(self.page.raw_data)
-            
-            if data_['hasError'] is False:
-                
-                obj = {
-                    'level': data_['content']['cateLevel'][-1],
-                    'ranking': data_['content']['rank'][-1],
-                    'shop_name': self.base_config['shop_name'],
-                    'shop_id': '999',
-                    'statistic_date': date_
-                }
-            else:
-                self.log(f'获取店铺排名和等级信息失败， 获取日期：{data_}')
-            
-            data_arr.append(obj)
-            
-            # 将这一批数据写入 excel
-            res = self.base.pandas_insert_data(data_arr, f"{self.base.source_path}/{self.task_name}&&{date_}.xlsx")
-            print(f"{self.base_config['shop_name']}{self.task_name}: {res['msg']}")
+        # 将这一批数据写入 excel
+        res = self.base.pandas_insert_data(data_arr, f"{self.base.source_path}/{self.task_name}&&{date_}.xlsx")
+        print(f"{self.base_config['shop_name']}{self.task_name}: {res['msg']}")
         
         return res
                          
@@ -273,7 +242,7 @@ class biz_shop_experience_score:
         if res is False:
             return
         
-        # res = self.get_json_data()
+        # res = self.json_data_to_excel()
         
         # if res is False:
         #     return

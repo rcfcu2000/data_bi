@@ -105,7 +105,7 @@ class biz_shop_content:
         
         self.page.change_mode('s')
         
-        if self.base.config_obj['automatic_date'] == '自动计算前一天' or self.base_config['automatic_date'] == '自动计算前一天':
+        if self.base.config_obj.get('automatic_date', self.base_config['automatic_date']) == '自动计算前一天':
             before_day = self.base.get_before_day_datetime()
             date_range = pd.date_range(before_day, before_day)
         else:
@@ -125,7 +125,7 @@ class biz_shop_content:
             
                 print(f"{self.base_config['shop_name']}{self.task_name}: 开始获取 {date_} 的数据, 类型为：{arr_chinese[item]}, 链接：{new_url}")
             
-                self.page.get(new_url)
+                self.page.get(new_url['url'])
             
                 data_ = json.loads(self.page.raw_data)
             
@@ -185,7 +185,13 @@ class biz_shop_content:
                 excel_data_df = excel_data_df.drop(labels=columns_to_drop, axis=1)
                 
                 # 写入数据库
-                res = self.insert_data_to_db(df=excel_data_df, table_name=self.table_name, add_col=self.add_col, key=self.primary_key)
+                res = self.insert_data_to_db(df=excel_data_df, table_name=self.table_name, add_col=self.add_col, key=self.primary_key, 
+                                             db_obj={
+                                                'db_user': self.base_config['db_user'],
+                                                'db_password': self.base_config['db_password'],
+                                                'db_host': self.base_config['db_host'],
+                                                'db_database': self.base_config['db_database']
+                                            })
                 
                 if res:
                     print(f"#{self.base_config['shop_name']}{self.task_name}: {filename} 的数据执行成功！")
@@ -231,11 +237,11 @@ class biz_shop_content:
 
         return df
     
-    def insert_data_to_db(self, df, table_name, key=[], add_col={}, keywords = None):
+    def insert_data_to_db(self, df, table_name, key=[], add_col={}, keywords = None, db_obj=None):
         
         # print(self.base.insert_data)
         
-        res = self.base.insert_data(df_cleaned=df, table_name=table_name, key=key, add_col=add_col, keywords=keywords)
+        res = self.base.insert_data(df_cleaned=df, table_name=table_name, key=key, add_col=add_col, keywords=keywords, db_obj=db_obj)
         
         if res is False:
             

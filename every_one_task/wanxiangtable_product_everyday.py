@@ -65,16 +65,8 @@ class wanxiangtable_product_everyday:
             # 已访问
             self.page = res
         else:
-            page.get(self.base.config_obj['url'])
-            self.page = page
-
-        # page.get(self.base.config_obj['url'])
-
-        # page.set.window.max()
-
-        # self.page = page
-
-        # print(self.page.url)
+            pageTab = page.new_tab(self.base.config_obj['url'])
+            self.page = pageTab
 
     def login_alimama(self):
 
@@ -198,17 +190,17 @@ class wanxiangtable_product_everyday:
             while True:
                 url = self.base.config_obj['second_level_url']
                 self.page.post(url=url, data=data_, show_errmsg=True)
-                print(f"开始下载{date_item}的宝贝主体报表, 第 {int(data_['offset']/100)+1} 页")
+                print(f"{self.base.config_obj['shop_name']}: 开始下载 {date_item}的 宝贝主体报表, 第 {int(data_['offset']/100)+1} 页")
                 data = json.loads(self.page.raw_data)
                 # print(data['data']['list'])
                 if data['data'] is None:
-                    print(f'发生错误， {data["info"]["errorCode"]}, {data["info"]["message"]}')
-                    print('随机3秒后准备重试...')
+                    print(f'{self.base.config_obj["shop_name"]}: 发生错误， {data["info"]["errorCode"]}, {data["info"]["message"]}')
+                    print(f"{self.base.config_obj['shop_name']}: {self.task_name} - 随机3秒后准备重试...")
                     self.page.wait(random.randint(1, 3))
                     continue
                     
                 if len(data['data']['list']) == 0:
-                    print(f"下载{date_item}的宝贝主体报表完毕！")
+                    print(f"{self.base.config_obj['shop_name']}: {self.task_name} - 下载{date_item}的宝贝主体报表完毕！")
                     break
 
                 for item in data['data']['list']:
@@ -278,7 +270,7 @@ class wanxiangtable_product_everyday:
             
             if len(data_arr) > 0:    
                 res = self.base.pandas_insert_data(
-                    data_arr, f"{self.base.source_path}/[万相台][宝贝主体报表]&&{self.down_load_date}&&{self.down_load_date}.xlsx")
+                    data_arr, f"{self.base.source_path}/{self.task_name}&&{self.down_load_date}&&{self.down_load_date}.xlsx")
   
     def get_excel_data_insert_db(self):
         
@@ -289,7 +281,7 @@ class wanxiangtable_product_everyday:
                     file
                     for file in os.listdir(excel_url)
                     if os.path.isfile(os.path.join(excel_url, file))
-                    and "[宝贝主体报表]" in file
+                    and f"{self.task_name}" in file
                     and file.endswith("xlsx")
                     ]
         
@@ -299,7 +291,7 @@ class wanxiangtable_product_everyday:
             clean_df = pd.read_excel(f"{self.base.source_path}/{file}")
             res = self.clean_and_transform_wanxiang_product_data(clean_df)
             if res['mark'] is False:
-                print(f'{res["data"]} 数据解析失败！: {res["msg"]}')
+                print(f'{self.base.config_obj["shop_name"]} - {self.task_name} - {res["data"]} 数据解析失败！: {res["msg"]}')
                 shutil.move(
                     f"{self.base.source_path}/" + file,
                     f"{self.base.failure_path}/" + file,
@@ -312,13 +304,13 @@ class wanxiangtable_product_everyday:
             
             mark = self.base.insert_data(df_cleaned=res['data'], table_name=self.table_name, key=['product_id', 'datetimekey', 'plan_id'])        
             if mark:
-                print(f'成功： {file} 数据写入成功！')
+                print(f'{self.base.config_obj["shop_name"]} - {self.task_name} - 成功： {file} 数据写入成功！')
                 shutil.move(
                     f"{self.base.source_path}/" + file,
                     f"{self.base.succeed_path}/" + file,
                 )
             else:
-                print(f'失败： {file} 数据写入失败！')
+                print(f'{self.base.config_obj["shop_name"]} - {self.task_name} - 失败： {file} 数据写入失败！')
                 shutil.move(
                     f"{self.base.source_path}/" + file,
                     f"{self.base.failure_path}/" + file,

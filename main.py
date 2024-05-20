@@ -23,6 +23,7 @@ import every_one_task.commodity_keywords_train as ckt
 import every_one_task.biz_shop_experience_score as bses
 import every_one_task.biz_shop_level as bpd
 import every_one_task.biz_shop_content as bsc
+import every_one_task.sql_action as sa
 
 # 程序是立即执行还是定时执行 immediate_execution代表立即执行, timed_execution 代表定时执行
 pattern = 'immediate_execution'
@@ -37,13 +38,13 @@ config_names = bact.get_config_name()
 def run_task(item):
     
     # 商品每日数据
-    ced.commodity_everyday_data(config=item).test()
+    ced.commodity_everyday_data(config=item).run()
     
-    # # 店铺流量数据
-    # st.shop_traffic(config=item).run()
+    # 店铺流量数据
+    st.shop_traffic(config=item).run()
 
     # # 商品流量数据
-    # ct.commodity_traffic(config=item).run()
+    ct.commodity_traffic(config=item).run()
     
     # # 店铺关键词[手淘搜索]
     # skw.shop_key_words_hand_search(config=item).run()
@@ -55,13 +56,13 @@ def run_task(item):
     # sr.search_ranking(config=item).run()
     
     # # 万相台[ 每日 ]
-    # wte.wanxiangtable_keywords_everyday(config=item).run()
+    wte.wanxiangtable_keywords_everyday(config=item).run()
     
     # # 万相台 [人群]
-    # wae.wanxiangtable_audience_everyday(config=item).run()
+    wae.wanxiangtable_audience_everyday(config=item).run()
             
     # 万相台 [宝贝主体]
-    # wpe.wanxiangtable_product_everyday(config=item).run()
+    wpe.wanxiangtable_product_everyday(config=item).run()
             
     # sku 销售详情
     # sku.commodity_sku(config=item).run()
@@ -79,14 +80,17 @@ def run_task(item):
     # ckt.commodity_keywords_train(config=item).run()
     
     # 店铺等级与排名
-    bpd.biz_shop_level(config=item).run()
+    # bpd.biz_shop_level(config=item).run()
     
     # 内容渠道效果
     # bsc.biz_shop_content(config=item).run()
     
     # 商品体验分
     # bses.biz_shop_experience_score(config=item).run()
-            
+
+    # 最后执行的 sql 方法
+    sa.sql_action(config=item).run()
+                 
     # 月度数据
     if month_execution_switch:
                 
@@ -142,4 +146,4 @@ def running(mode='sequence'):
 
 if __name__ == '__main__':
     
-    running('sequence')
+    running('s')

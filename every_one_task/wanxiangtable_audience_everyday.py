@@ -37,6 +37,7 @@ class wanxiangtable_audience_everyday:
             # 'src_type': '手淘搜索'
         }
         self.csrfId = ''
+        self.check_url = self.base.config_obj['check_url']
 
     # 判断数据是否是以 b 开头
     def is_bytes_string(self, data):
@@ -64,15 +65,14 @@ class wanxiangtable_audience_everyday:
             page = WebPage(chromium_options=co)
         
             # res = self.base.whether_the_url_exists_in_the_browser(page=page, url_str='one.alimama.com')
-            
-            res = page.get_tab(url='one.alimama.com')
+            res = page.get_tab(url=self.check_url)
         
             if res is not None:
                 # 已访问
                 self.page = res
             else:
-                page.get(self.base.config_obj['url'])
-                self.page = page
+                pageTab = page.new_tab(self.base.config_obj['url'])
+                self.page = pageTab
 
             return True
         
@@ -201,15 +201,15 @@ class wanxiangtable_audience_everyday:
 
                 url = 'https://one.alimama.com/report/createDownLoadTask.json'
                 self.page.post(url=url, data=down_load_data, show_errmsg=True)
-                # print(
-                #     f"one.alimama.com: create downLoad task start --- {date_item}")
+
+                print(f'{self.base.config_obj["shop_name"]}: 万相台 - 人群报表， 推送 {date_item} 的下载任务！')
                 data = json.loads(self.page.raw_data)
                 
                 task_ = [data['data']['taskId'], date_item]
                 task_tup = tuple(task_)
                 task.append(task_tup)
-                # print(
-                #     f"one.alimama.com: get downLoad task over --- {date_item} --- taskId --- {data['data']['taskId']}")
+                
+                print(f'{self.base.config_obj["shop_name"]}: 万相台 - 人群报表， {date_item} 任务推送成功！')
                 self.page.wait(random.randint(1, 3))
 
             with open('./config/download_wanxiang_audience_task_id.txt', 'w') as f:
@@ -224,83 +224,9 @@ class wanxiangtable_audience_everyday:
         
         except Exception as e:
             
-            print(f'{self.base.config_obj["shop_name"]}: <error> 创建下载任务失败 {str(e)}')
+            print(f'{self.base.config_obj["shop_name"]}: 万相台 - 人群报表， <error> 创建下载任务失败 {str(e)}')
             return False
-            
-    def download_excel_file(self):
-
-        data = ''
-
-        params = {
-            "r": "mx_1148",
-            "taskId": "2378961",
-            "bizCode": "universalBP",
-            "csrfId": "a9c1095bded56535a3212a187acc72a3_1_1_1"
-        }
-
-        # 设置HTTP头部信息
-        headers = {
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Accept-Language": "zh-CN,zh;q=0.9",
-            "Cookie": "lid=%E8%9C%A1%E7%AC%94%E6%B4%BE%E5%AE%B6%E5%B1%85%E6%97%97%E8%88%B0%E5%BA%97%3A%E5%8D%8E; cna=RwegHkzksWwCAXZwOZrj0He1; t=3a9d00d0feed7a5cf2a0f055d929f2ae; cookie2=17fe687e28103a8d307e0ee84573d1be; cancelledSubSites=empty; xlly_s=1; sgcookie=E10059IJFnM7uxwYLYih%2F%2B%2BxxK6DBD6qQKpK7dU0%2B3hqU2ZbrvTSrMbza259Dic5zR%2BVXPmVWvJgB%2FkROpN9six1XC9cHWO2VxVvH%2FQoXXEkKTCavIZ9RfL1MQsyZPy2ClJH; uc1=cookie21=UIHiLt3xSalX&cookie14=UoYfolRzGqpAYA%3D%3D; csg=1005fe05; unb=2217140767009; sn=%E8%9C%A1%E7%AC%94%E6%B4%BE%E5%AE%B6%E5%B1%85%E6%97%97%E8%88%B0%E5%BA%97%3A%E5%8D%8E; _tb_token_=761fb15e13680; tfstk=fDp-bANclq0uQjGHF3GDT3nXjrmmyLKrhU-_KwbuOELvlEAlOb8nppLHk05IzTvpkUYDKQ2HAkIBoE9S2T13pHTXxJbS8T4B9E8q4pxW-vQBbT1eZwblJ9KeWm0iIAxy495ISVDMdjb9vOS7OgahlSsNxSX-VAxy4oZ8RcAjIWKxqLv5Re15hosFlg_Cde1bhM7bFMw5AriAYZ_Cda1CcnsGXMaCOJG8S0Q4Vgep32DMuWlqBXhpHigF53ebhMJC25bM2Z3s5KeNwNt5kJgM1wOCJZJsojK2WQTl0eHtk982OesplrghaHOvkgLoWy7HU3vdr3hSznBVyt9W6kwBDTQP9L10yqQ6Un9NhsDsXn92r3JvxkMCmFbX4L6KCcWRFa6A0p04FwdXOLfPLzgGaHOvkgB14zpMBbczSNI3NmnYTW55mRUD6XvJf37hDNm5NWPFtiSASmnYTW550iQiVJNUT6jV.",
-            "Origin": "https://one.alimama.com",
-            "Referer": "https://one.alimama.com/",
-            "Sec-CH-UA": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
-            "Sec-CH-UA-Mobile": "?0",
-            "Sec-CH-UA-Platform": "Windows",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-site",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-        }
-
-        with open('./config/download_wanxiang_audience_task_id.txt', 'r') as f:
-            data = f.read().split('\n')
-            # print(data)
-
-        for item in data:
-
-            if len(item) > 0:
-
-                print(f"one.alimama.com: downLoad excel start --- {item}")
-                
-                params['r'] = f'mx_{random.randint(100, 1000)}'
-                params['taskId'] = item[0]
-                params['csrfId'] = item[1]
-
-                item = item.split('----')
-
-                url = f"https://bpcommon.alimama.com/commonapi/report/async/getDownloadUrl.json"
-
-                # self.page.download(url, save_path)
-
-                self.page.get(url, headers=headers, params=params)
-
-                print(self.page.raw_data)
-
-                # obj = {'id': item[0]}
-
-                # self.page.change_mode('d')
-
-                # self.page.get('https://one.alimama.com/index.html#!/report/download-list')
-
-                # self.page.wait(6)
-
-                # el = self.page('tag:body')
-
-                # url_ = el.run_js(f"getDownloadUrl({obj})")
-
-                # print(url_)
-
-                print(f"one.alimama.com: downLoad excel end --- {item}")
-
-                self.page.wait(random.randint(1, 3))
-
-        self.page.wait(6000)
-
-        with open('./config/download_wanxiang_audience_task_id.txt', 'w') as f:
-            data = f.write('')
-
+        
     def download_excel_file_RPA(self):
         
         data = ''
@@ -577,6 +503,8 @@ class wanxiangtable_audience_everyday:
         self.unzip_files()
         
         print(f'{self.base.config_obj["shop_name"]}: <info> 阿里妈妈，解压zip文件成功！')
+        
+        self.page.wait(3)
 
         self.base.wanxiang_table(table_name="wanxiang_audience")
         
