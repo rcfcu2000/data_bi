@@ -21,9 +21,11 @@ import every_one_task.price_force as pf
 import every_one_task.commodity_keywords_hand_search as ckhs
 import every_one_task.commodity_keywords_train as ckt
 import every_one_task.biz_shop_experience_score as bses
-import every_one_task.biz_shop_level as bpd
+import every_one_task.biz_product_dayinfo as bpd
 import every_one_task.biz_shop_content as bsc
 import every_one_task.sql_action as sa
+import every_one_task.biz_shop_customer_service as bscs
+import every_one_task.biz_shop_level as bpd
 
 # 程序是立即执行还是定时执行 immediate_execution代表立即执行, timed_execution 代表定时执行
 pattern = 'immediate_execution'
@@ -80,7 +82,13 @@ def run_task(item):
     # ckt.commodity_keywords_train(config=item).run()
     
     # 店铺等级与排名
-    # bpd.biz_shop_level(config=item).run()
+    #bpd.biz_product_dayinfo(config=item).run()
+    
+    # 店铺等级与排名
+    bscs.biz_shop_customer_service(config=item).run()
+
+    # 内容渠道效果
+    #bpd.biz_shop_level(config=item).run()
     
     # 内容渠道效果
     # bsc.biz_shop_content(config=item).run()

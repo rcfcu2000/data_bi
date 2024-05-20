@@ -202,7 +202,6 @@ class base_action:
                 self.config_obj[key] = documents[key]
         
             base_config = self.get_configs_return_obj('base_config', config_name=config_name)
-            
             for key in base_config:
                 if key not in self.config_obj.keys():
                     self.config_obj[key] = base_config[key]
@@ -2285,6 +2284,11 @@ class base_action:
 
      # 写入数据库的方法 [ 直接执行到数据库的方法 ]
     
+    def insert_data(self, df_cleaned, table_name, key=[], add_col={}, keywords=None):
+        
+        mark = False
+        
+        engine = self.create_engine()
     def insert_data(self, df_cleaned, table_name, key=[], add_col={}, keywords=None, db_obj=None):
         
         mark = False

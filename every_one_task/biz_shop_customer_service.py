@@ -1,5 +1,5 @@
 """
-    内容渠道效果
+    店铺等级与排名
 """
 import random
 import json
@@ -15,33 +15,36 @@ from io import BytesIO
 from datetime import datetime, timedelta
 from DrissionPage import WebPage, ChromiumOptions, ChromiumPage, SessionOptions
 
-class biz_shop_content:
+class biz_shop_customer_service:
     
     def __init__(self, config) -> None:
         
         self.base = base_action()
         self.config = config
-        
-        # 修改 存储数据的 excel 名称 [根据需要修改的参数]
-        self.task_name = "[生意参谋]&&[内容渠道效果]"
-        
+               
         # 获取配置文件中该任务的配置
         self.get_config_bool = self.base.get_configs(self.__class__.__name__, config_name=self.config)
         
         # 获取配置文件中公用配置的对象
-        self.base_config = self.base.get_configs_return_obj('base_config', config_name=self.config)
+        #self.base_config = self.base.get_configs_return_obj('base_config', config_name=self.config)
         self.create_folder_bool = self.base.create_folder("D:", self.base.config_obj['excel_storage_path'])
         
         # 检查并拿到 pageTab [根据需要修改的参数]
-        self.check_url = self.base_config['check_url']
+        self.check_url = self.base.config_obj['check_url']
         
-        self.shop_name = self.base_config['shop_name']
-        self.table_name = self.__class__.__name__
+        self.shop_id = self.base.config_obj['shop_id']
+
+        self.shop_name = self.base.config_obj['shop_name']
+
+        # 修改 存储数据的 excel 名称 [根据需要修改的参数]
+        self.task_name = self.base.config_obj['task_name']
+
+        self.table_name = self.base.config_obj['table_name']
         
         # [根据需要修改的参数]
-        self.primary_key = ['statistic_date']
+        self.primary_key = ['shop_id', 'statistic_date']
         # [根据需要修改的参数]
-        self.add_col = {}
+        self.add_col = {'shop_id':self.shop_id, 'shop_name':self.shop_name}
         self.page = None
     
     def visit_sycm(self):
@@ -56,7 +59,7 @@ class biz_shop_content:
                 print(f'# {self.shop_name}{self.task_name} <error> 创建存储文件出错，请检查。')
                 return False
 
-            port = self.base.config_obj.get('port', self.base_config['port'])    
+            port = self.base.config_obj.get('port', self.base.config_obj['port'])    
             
             co = self.base.set_ChromiumOptions()
 
@@ -88,73 +91,100 @@ class biz_shop_content:
                 'msg': f'# {self.shop_name}{self.task_name} <info> 访问失败！'
             }
     
-    def get_json_data(self):
-        
-        # 三种类型的数据 直播 图文 短视频
-        arr = ['live', 'video', 'article']
-        
-        arr_chinese = {
-            'live': '直播',
-            'video': '短视频',
-            'article': '短视频'
+    def clean_and_transform_shop_cs_data(self, excel_data_df):
+        """
+        Transforms the Excel data to align with the 'biz_shop_customer_service' database table schema.
+
+        :param excel_data_df: DataFrame containing the Excel data.
+        :return: Transformed DataFrame ready for database insertion.
+        """
+        # Rename columns to match the database schema
+        column_mappings = {
+            '日期': 'statistic_date',
+            '咨询人数': 'inquiry_count',
+            '平均响应时长（秒)': 'avg_response_time',
+            '客户满意率': 'customer_satisfaction_rate',
+            '客服销售额': 'sales_revenue',
+            '客服销售人数': 'sales_count',
+            '客服销售额占比': 'sales_revenue_ratio',
+            '客服销售客单价': 'sales_unit_value',
+            '询单转化率': 'inquiry_conversion_rate'
         }
+        transformed_df = excel_data_df.rename(columns=column_mappings)
+
+        transformed_df = transformed_df[transformed_df.iloc[:, 0] != '汇总值']
+
+        # Convert date format from float to YYYY-MM-DD (if necessary)
+        try:
+            transformed_df['statistic_date'] = pd.to_datetime(transformed_df['statistic_date'], format='%Y%m%d')
+            transformed_df['statistic_date'] =  transformed_df['statistic_date'].apply(lambda x:x.strftime('%Y-%m-%d')) 
+            transformed_df['inquiry_conversion_rate'] =  transformed_df['inquiry_conversion_rate'].apply(lambda x:0.0 if x == '延时统计' else x) 
+        except Exception as ex:
+            print(ex)
+
+        # 将包含逗号的字符串字段转换为整数
+        columns_to_convert = [
+            'inquiry_count', 'sales_count', 
+        ]
+
+        for column in columns_to_convert:
+            try:
+                transformed_df[column] = transformed_df[column].apply(lambda x : 0.0 if x == '-' else x)
+                transformed_df[column] = transformed_df[column].replace({',': ''}, regex=True).astype('int64')
+            except Exception as e:
+                #print(column, e)
+                transformed_df[column] = 0
+
+        return transformed_df
+
+    def down_load_excel(self):
         
-        date_format = "%Y-%m-%d"
+        date_format = "%Y%m%d"
         
         date_range = []
         
         self.page.change_mode('s')
         
-        if self.base.config_obj.get('automatic_date', self.base_config['automatic_date']) == '自动计算前一天':
+        if self.base.config_obj['automatic_date'] == '自动计算前一天' or self.base.config_obj['automatic_date'] == '自动计算前一天':
             before_day = self.base.get_before_day_datetime()
             date_range = pd.date_range(before_day, before_day)
         else:
-            date_range = pd.date_range(self.base.config_obj.get('start_date', self.base_config['start_date']), self.base.config_obj.get('end_date', self.base_config['end_date']))
+            date_range = pd.date_range(self.base.config_obj.get('start_date', self.base.config_obj['start_date']), self.base.config_obj.get('end_date', self.base.config_obj['end_date']))
         
+        # 重试
         url = self.base.config_obj['second_level_url']
         
         for date in date_range:
             
             data_arr = []
             
-            date_ = date.strftime(date_format)
+            start_date = date + timedelta(days=-30)
+            start_date = start_date.strftime(date_format)
+
+            # use date as end_date
+            end_date = date.strftime(date_format)
             
-            for item in arr:
+            new_url = self.base.new_url(dict_={'startDate': f'{start_date}', 'endDate': f'{end_date}'}, oldurl=url)
             
-                new_url = self.base.new_url(dict_={'dateRange': f'{date_}|{date_}', 'contentType': item}, oldurl=url)
+            print(f"{self.base.config_obj['shop_name']}{self.task_name}: 开始获取 {end_date} 的数据, 链接：{new_url}")
             
-                print(f"{self.base_config['shop_name']}{self.task_name}: 开始获取 {date_} 的数据, 类型为：{arr_chinese[item]}, 链接：{new_url}")
+            self.page.get(new_url['url'])
+
+            contents = str(self.page.raw_data)
+
+            download_link = contents[contents.find('"data":"') + 8 : contents.find('",\\n\\t"sessionId"')]
+
+            self.page.get(download_link)
+
+            df = pd.read_excel(BytesIO(self.page.raw_data), header=0)
+
+            df = self.clean_and_transform_shop_cs_data(df)
+
+            df.to_excel(f"{self.base.source_path}/{self.task_name}&&{end_date}.xlsx", index=False)
             
-                self.page.get(new_url['url'])
-            
-                data_ = json.loads(self.page.raw_data)
-            
-                if len(data_['data']) > 0:
-                    
-                    for item_ in data_['data']:
-                
-                        obj = {
-                            'type': arr_chinese[item],
-                            'channel': item_.get('chlType', ''),
-                            'count': item_.get('contentInterestUv', ''),
-                            'amount': item_.get('interestPayAmt', ''),
-                            'statistic_date': date_,
-                            'shop_id': self.base_config['shop_id']
-                        }
-                        
-                        data_arr.append(obj)            
-                else:
-                    
-                    self.log(f'获取 {date_} 的数据, 类型为：{arr_chinese[item]}, 链接：{new_url} , 失败')
-            
-            if len(data_arr) > 0:
-                # 将这一批数据写入 excel
-                res = self.base.pandas_insert_data(data_arr, f"{self.base.source_path}/{self.task_name}&&{date_}.xlsx")
-                print(f"{self.base_config['shop_name']}{self.task_name}: {res['msg']}")
-            else:
-                print(f"{self.base_config['shop_name']}{self.task_name}: {date_} 的数据为空 ！")
+            print(f"{self.base.config_obj['shop_name']}{self.task_name}: True")
         
-        return res
+        return True
                          
     def get_excel_data_to_db(self):
         
@@ -167,14 +197,14 @@ class biz_shop_content:
         
             for filename in filelist:
                 
-                print(f"{self.base_config['shop_name']}{self.task_name}: 开始执行 {filename} 的数据！")
+                print(f"{self.base.config_obj['shop_name']}{self.task_name}: 开始执行 {filename} 的数据！")
                 
                 excel_data_df = pd.read_excel(
                         f"{self.base.source_path}/" + filename)
                 
                 if len(excel_data_df) == 0:
-                    print(f"#{self.base_config['shop_name']}{self.task_name}: {filename} 是空数据！")
-                    self.log(msg=f'{filename} 是空数据！, {date_}')
+                    print(f"#{self.base.config_obj['shop_name']}{self.task_name}: {filename} 是空数据！")
+                    self.log(msg=f'{filename} 是空数据！')
                     shutil.move(
                         f"{self.base.source_path}/" + filename,
                         f"{self.base.failure_path}/" + filename,
@@ -185,30 +215,24 @@ class biz_shop_content:
                 excel_data_df = excel_data_df.drop(labels=columns_to_drop, axis=1)
                 
                 # 写入数据库
-                res = self.insert_data_to_db(df=excel_data_df, table_name=self.table_name, add_col=self.add_col, key=self.primary_key, 
-                                             db_obj={
-                                                'db_user': self.base_config['db_user'],
-                                                'db_password': self.base_config['db_password'],
-                                                'db_host': self.base_config['db_host'],
-                                                'db_database': self.base_config['db_database']
-                                            })
+                res = self.insert_data_to_db(df=excel_data_df, table_name=self.table_name, add_col=self.add_col, key=self.primary_key)
                 
                 if res:
-                    print(f"#{self.base_config['shop_name']}{self.task_name}: {filename} 的数据执行成功！")
+                    print(f"#{self.base.config_obj['shop_name']}{self.task_name}: {filename} 的数据执行成功！")
                     # 将成功写入的文件移入 成功的文件夹
                     shutil.move(
                         f"{self.base.source_path}/" + filename,
                         f"{self.base.succeed_path}/" + filename,
                     )
                 else:
-                    print(f"#{self.base_config['shop_name']}{self.task_name}:  写入失败， {filename} 文件已剪切至 failure 文件夹！")
+                    print(f"#{self.base.config_obj['shop_name']}{self.task_name}:  写入失败， {filename} 文件已剪切至 failure 文件夹！")
                     self.log(msg=f'# 写入失败， {filename} 文件已剪切至 failure 文件夹！')
                     shutil.move(
                         f"{self.base.source_path}/" + filename,
                         f"{self.base.failure_path}/" + filename,
                     )
                 
-            print(f"#{self.base_config['shop_name']}{self.task_name}: 数据写入执行完毕！")
+            print(f"#{self.base.config_obj['shop_name']}{self.task_name}: 数据写入执行完毕！")
               
         except Exception as e:
             
@@ -217,31 +241,15 @@ class biz_shop_content:
                 f"{self.base.failure_path}/" + filename,
             )
             
-            print(f"##{self.base_config['shop_name']}{self.task_name}:  写入报错， {filename} 文件已剪切至 failure 文件夹！")
+            print(f"##{self.base.config_obj['shop_name']}{self.task_name}:  写入报错， {filename} 文件已剪切至 failure 文件夹！")
             self.log(msg=f'# 写入报错， {filename} 文件已剪切至 failure 文件夹！')
             print(e)
 
-    def clean_and_transform_data(self, df):
-
-        columns_to_convert = [
-            'price_strength',
-            'unit_price',
-            'price_strength_exposure'
-        ]
-        for column in columns_to_convert:
-            try:    
-                df[column] = df[column].replace({',': ''}, regex=True).str.rstrip('%').astype('float')
-            except Exception as e:
-                #print(column, e)
-                df[column] = 0.0
-
-        return df
-    
-    def insert_data_to_db(self, df, table_name, key=[], add_col={}, keywords = None, db_obj=None):
+    def insert_data_to_db(self, df, table_name, key=[], add_col={}, keywords = None):
         
         # print(self.base.insert_data)
         
-        res = self.base.insert_data(df_cleaned=df, table_name=table_name, key=key, add_col=add_col, keywords=keywords, db_obj=db_obj)
+        res = self.base.insert_data(df_cleaned=df, table_name=table_name, key=key, add_col=add_col, keywords=keywords)
         
         if res is False:
             
@@ -276,7 +284,7 @@ class biz_shop_content:
         if res is False:
             return
         
-        res = self.get_json_data()
+        res = self.down_load_excel()
         
         if res is False:
             return
@@ -289,8 +297,8 @@ class biz_shop_content:
         
         self.visit_sycm()
         # self.base.login_sycm(task_name=self.task_name)
-        self.get_json_data()
+        self.down_load_excel()
     
 if __name__ == "__main__":
-    test = biz_shop_content()
+    test = biz_shop_customer_service()
     test.run()
